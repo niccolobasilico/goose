@@ -426,8 +426,17 @@ extension HealthDataStore {
     return nil
   }
 
+  func importedSleepSessions() -> [[String: Any]] {
+    if let cached = importedSleepSessionsCache {
+      return cached
+    }
+    let computed = Self.array(packetInputReports["external_sleep"]?["sessions"])
+    importedSleepSessionsCache = computed
+    return computed
+  }
+
   func importedSleepNight(for date: Date, calendar: Calendar = .current) -> [String: Any]? {
-    let sessions = Self.array(packetInputReports["external_sleep"]?["sessions"])
+    let sessions = importedSleepSessions()
     guard !sessions.isEmpty else {
       return nil
     }
@@ -439,12 +448,14 @@ extension HealthDataStore {
     let endMS = Int64(dayEnd.timeIntervalSince1970 * 1000)
     return sessions
       .filter { session in
-        guard let end = Self.int64Value(session["end_time_unix_ms"]) else {
+        // Prima il check di range (economico), il parse JSON solo per i match.
+        guard let end = Self.int64Value(session["end_time_unix_ms"]),
+              end >= startMS, end < endMS else {
           return false
         }
         // La notte appartiene al giorno del risveglio; i nap sono esclusi.
         let isNap = (Self.jsonObject(fromJSONString: session["provenance_json"])?["is_nap"] as? Bool) ?? false
-        return end >= startMS && end < endMS && !isNap
+        return !isNap
       }
       .max { lhs, rhs in
         (Self.int64Value(lhs["duration_ms"]) ?? 0) < (Self.int64Value(rhs["duration_ms"]) ?? 0)
@@ -713,8 +724,13 @@ extension HealthDataStore {
   }
 
   func dailyActivityMetrics() -> [[String: Any]] {
-    Self.array(packetInputReports["daily_activity"]?["metrics"])
+    if let cached = dailyActivityMetricsCache {
+      return cached
+    }
+    let computed = Self.array(packetInputReports["daily_activity"]?["metrics"])
       .filter { Self.localHealthMetricRowIsDisplaySafe($0) }
+    dailyActivityMetricsCache = computed
+    return computed
   }
 
   func dailyActivityMetrics(forDateKey dateKey: String) -> [[String: Any]] {

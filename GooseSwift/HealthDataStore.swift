@@ -26,7 +26,18 @@ final class HealthDataStore: ObservableObject {
   let heartRateSeriesStore = HeartRateSeriesStore.shared
   var attemptedCatalogLoad = false
   var previewMissingData = false
-  var packetInputReports: [String: [String: Any]] = [:]
+  var packetInputReports: [String: [String: Any]] = [:] {
+    didSet {
+      dailyRecoveryMetricsCache = nil
+      dailyActivityMetricsCache = nil
+      importedSleepSessionsCache = nil
+    }
+  }
+  // Cache dei filtri display-safe: il parsing JSON di ~500 righe a ogni accesso
+  // rende la UI inutilizzabile con lo storico importato.
+  var dailyRecoveryMetricsCache: [[String: Any]]?
+  var dailyActivityMetricsCache: [[String: Any]]?
+  var importedSleepSessionsCache: [[String: Any]]?
   var packetScoreReports: [String: [String: Any]] = [:]
   var referenceComparisonReports: [String: [String: Any]] = [:]
   var packetInputRefreshWorkItem: DispatchWorkItem?
@@ -34,6 +45,7 @@ final class HealthDataStore: ObservableObject {
   var packetInputIsRunning = false
   var heartRateTimelineRefreshID: UUID?
   var heartRateSeriesUpdateObserver: NSObjectProtocol?
+  var historyImportObserver: NSObjectProtocol?
   let packetInputQueue = DispatchQueue(label: "com.goose.swift.health.packet-inputs", qos: .utility)
   let heartRateTimelineQueue = DispatchQueue(label: "com.goose.swift.health.heart-rate-timeline", qos: .utility)
   lazy var databasePath = HealthDataStore.defaultDatabasePath()
@@ -63,11 +75,25 @@ final class HealthDataStore: ObservableObject {
         self?.refreshHeartRateTimeline()
       }
     }
+    historyImportObserver = NotificationCenter.default.addObserver(
+      forName: Self.historyImportDidCompleteNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.runPacketInputs()
+      }
+    }
   }
+
+  static let historyImportDidCompleteNotification = Notification.Name("MurmurHistoryImportDidComplete")
 
   deinit {
     if let heartRateSeriesUpdateObserver {
       NotificationCenter.default.removeObserver(heartRateSeriesUpdateObserver)
+    }
+    if let historyImportObserver {
+      NotificationCenter.default.removeObserver(historyImportObserver)
     }
   }
 

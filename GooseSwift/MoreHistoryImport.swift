@@ -50,6 +50,13 @@ extension MoreDataStore {
         self.historyImportInProgress = false
         self.historyImportStatus = outcome.summary
         self.historyImportStatusKind = outcome.failed ? .blocked : .ready
+        if !outcome.failed {
+          // Le schermate salute devono ricaricare i report dal DB appena importato.
+          NotificationCenter.default.post(
+            name: HealthDataStore.historyImportDidCompleteNotification,
+            object: nil
+          )
+        }
       }
     }
   }
