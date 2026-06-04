@@ -105,6 +105,12 @@ extension HealthDataStore {
         method: "metrics.daily_activity_metrics",
         args: dailyActivityMetricListArgs(databasePath: databasePath)
       )
+      if var dailyActivity = reports["daily_activity"] {
+        // Filtro display-safe precalcolato in background: mai parse JSON sul main thread.
+        dailyActivity["metrics_display_safe"] = array(dailyActivity["metrics"])
+          .filter { localHealthMetricRowIsDisplaySafe($0) }
+        reports["daily_activity"] = dailyActivity
+      }
       reports["hourly_activity"] = try bridge.request(
         method: "metrics.hourly_activity_metrics",
         args: hourlyActivityMetricListArgs(databasePath: databasePath)
@@ -113,6 +119,11 @@ extension HealthDataStore {
         method: "metrics.daily_recovery_metrics",
         args: dailyRecoveryMetricListArgs(databasePath: databasePath)
       )
+      if var dailyRecovery = reports["daily_recovery"] {
+        dailyRecovery["metrics_display_safe"] = array(dailyRecovery["metrics"])
+          .filter { localHealthMetricRowIsDisplaySafe($0) }
+        reports["daily_recovery"] = dailyRecovery
+      }
       // Notti importate (murmur-history): best-effort, non blocca gli altri report.
       if let externalSleep = try? bridge.request(
         method: "sleep.list_external_sessions",

@@ -8,8 +8,14 @@ extension HealthDataStore {
     if let cached = dailyRecoveryMetricsCache {
       return cached
     }
-    let computed = Self.array(packetInputReports["daily_recovery"]?["metrics"])
-      .filter { Self.localHealthMetricRowIsDisplaySafe($0) }
+    let report = packetInputReports["daily_recovery"]
+    let computed: [[String: Any]]
+    if let safe = report?["metrics_display_safe"] as? [[String: Any]] {
+      computed = safe
+    } else {
+      computed = Self.array(report?["metrics"])
+        .filter { Self.localHealthMetricRowIsDisplaySafe($0) }
+    }
     dailyRecoveryMetricsCache = computed
     return computed
   }

@@ -635,7 +635,10 @@ extension HealthDataStore {
     fractionDigits: Int,
     resources: [String]
   ) -> HealthTrendModel {
-    let points = rows.enumerated().compactMap { index, row -> HealthTrendPoint? in
+    // Con lo storico importato le righe sono ~500: limitare i punti del trend
+    // tiene leggeri sia la costruzione del modello sia il rendering del grafico.
+    let recentRows = Array(rows.suffix(90))
+    let points = recentRows.enumerated().compactMap { index, row -> HealthTrendPoint? in
       guard let value = doubleValue(row[valueKey]) else {
         return nil
       }
