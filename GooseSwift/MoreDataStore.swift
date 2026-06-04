@@ -11,7 +11,7 @@ import HealthKit
 final class MoreDataStore: ObservableObject {
   @Published var databasePath: String
   @Published var storageStatus = "Not checked"
-  @Published var storageNextAction = "Run Check after Goose has created the local database"
+  @Published var storageNextAction = "Run Check after Murmur has created the local database"
   @Published var schemaVersion = "Unknown"
 
   @Published var captureSessionID: String?
@@ -302,7 +302,7 @@ final class MoreDataStore: ObservableObject {
     guard databaseExists else {
       storageStatus = "Unavailable; no database at path"
       storageNextAction = "Start capture or run another bridge flow that creates goose.sqlite"
-      existingGooseRecordsStatus = "No Goose records"
+      existingGooseRecordsStatus = "No Murmur records"
       return
     }
 
@@ -371,7 +371,7 @@ final class MoreDataStore: ObservableObject {
   }
 
   func runAppleHealthDryRun() {
-    healthSyncReports = ["Apple Health metric sync disabled; Goose metrics must come from WHOOP packets or local estimates."]
+    healthSyncReports = ["Apple Health metric sync disabled; Murmur metrics must come from WHOOP packets or local estimates."]
   }
 
   func markHealthConnectUnavailable() {

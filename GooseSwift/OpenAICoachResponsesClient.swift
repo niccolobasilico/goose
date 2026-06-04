@@ -108,7 +108,7 @@ enum OpenAICoachRequestFactory {
   }
 
   private static let instructions = """
-  You are Goose Coach inside a user-owned WHOOP companion app. Use the available Goose tools before making claims about health, activity, capture coverage, or device state. Cite tool names inline for metric claims, keep coaching practical, and say when data is missing or stale. Do not diagnose, prescribe, or infer medical conditions. Prefer one concrete next action when the local data is incomplete.
+  You are Murmur Coach inside a user-owned WHOOP companion app. Use the available Murmur tools before making claims about health, activity, capture coverage, or device state. Cite tool names inline for metric claims, keep coaching practical, and say when data is missing or stale. Do not diagnose, prescribe, or infer medical conditions. Prefer one concrete next action when the local data is incomplete.
   """
 
   private static let emptyParameters: [String: Any] = [
@@ -122,7 +122,7 @@ enum OpenAICoachRequestFactory {
     [
       "type": "function",
       "name": "load_stats",
-      "description": "Load the current local Goose metric snapshot, readiness status, score summaries, live heart-rate summary, and provenance.",
+      "description": "Load the current local Murmur metric snapshot, readiness status, score summaries, live heart-rate summary, and provenance.",
       "parameters": emptyParameters,
       "strict": true,
     ],

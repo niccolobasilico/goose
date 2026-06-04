@@ -35,7 +35,7 @@ enum CoachTipFactory {
       ),
       source: "Local readiness, scores, and live HR",
       prompt: """
-      Give me today's coaching priority from my local Goose context. Use readiness, sleep, recovery, strain, stress, live heart rate, and missing-data gaps. Cite the local tool outputs and keep it to one concrete next action.
+      Give me today's coaching priority from my local Murmur context. Use readiness, sleep, recovery, strain, stress, live heart rate, and missing-data gaps. Cite the local tool outputs and keep it to one concrete next action.
 
       Current local highlights:
       - Readiness: \(readiness)
@@ -72,7 +72,7 @@ enum CoachTipFactory {
         title: "\(route.title) Coach",
         message: "\(snapshot.title): \(snapshot.displayValue) | \(snapshot.status).",
         source: snapshot.provenance,
-        prompt: "Explain my \(route.title.lowercased()) page using the local Goose context. Cite the tool outputs and call out stale or missing data.",
+        prompt: "Explain my \(route.title.lowercased()) page using the local Murmur context. Cite the tool outputs and call out stale or missing data.",
         systemImage: "sparkles",
         tint: snapshot.tint
       )
@@ -96,7 +96,7 @@ enum CoachTipFactory {
       ),
       source: "Local sleep score and schedule",
       prompt: """
-      Explain my sleep page and give one practical next action. Use only local Goose context and call out missing data and provenance.
+      Explain my sleep page and give one practical next action. Use only local Murmur context and call out missing data and provenance.
 
       Current local highlights:
       - Sleep score: \(snapshot.displayValue) | \(snapshot.status) | \(snapshot.freshness)

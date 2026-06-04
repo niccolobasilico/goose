@@ -18,7 +18,7 @@ struct CoachSignInScreen: View {
 
           Text("Sign in to Coach")
             .font(.title2.bold())
-          Text("Sign in to stream Coach replies and local Goose tool calls.")
+          Text("Sign in to stream Coach replies and local Murmur tool calls.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)

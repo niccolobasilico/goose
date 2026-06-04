@@ -77,7 +77,7 @@ extension GooseAppModel {
       overnightGuardExportManifestError = nil
       overnightGuardExportInProgress = false
       overnightGuardCanExportLastSession = false
-      overnightGuardWarning = "Resumed previous overnight guard. Last heartbeat \(Self.overnightRecoveredStatusSummary(recovered)). Keep the official WHOOP app closed until Goose final sync/export finishes."
+      overnightGuardWarning = "Resumed previous overnight guard. Last heartbeat \(Self.overnightRecoveredStatusSummary(recovered)). Keep the official WHOOP app closed until Murmur final sync/export finishes."
       refreshOvernightPowerState(reason: "resume", record: true)
       refreshOvernightReadiness(reason: "resume", record: true)
       enqueueOvernightSQLiteSession(finalStatus: "active", notes: "resumed_unclean_session")
@@ -113,7 +113,7 @@ extension GooseAppModel {
       overnightGuardExportManifestURL = nil
       overnightGuardExportManifestError = nil
       overnightGuardCanExportLastSession = true
-      overnightGuardWarning = "Previous overnight guard did not close cleanly; last heartbeat \(Self.overnightRecoveredStatusSummary(recovered)). Export Goose before opening the official WHOOP app."
+      overnightGuardWarning = "Previous overnight guard did not close cleanly; last heartbeat \(Self.overnightRecoveredStatusSummary(recovered)). Export Murmur before opening the official WHOOP app."
       refreshOvernightReadiness(reason: "resume_failed", record: true)
       ble.record(
         level: .error,

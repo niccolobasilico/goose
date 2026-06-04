@@ -413,7 +413,7 @@ struct SleepV2AlarmSheet: View {
   private func hapticCard(palette: SleepV2Palette) -> some View {
     DisclosureGroup(isExpanded: $showingHapticOptions) {
       VStack(alignment: .leading, spacing: 10) {
-        Text("Choose the vibration pattern Goose should use for this alarm profile.")
+        Text("Choose the vibration pattern Murmur should use for this alarm profile.")
           .font(.footnote)
           .foregroundStyle(palette.secondaryText)
           .fixedSize(horizontal: false, vertical: true)

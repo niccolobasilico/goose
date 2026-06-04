@@ -395,7 +395,7 @@ struct MoreHealthSyncView: View {
       Section("Adapter") {
         MoreInfoRow(title: "Health Adapter", value: store.healthAdapterStatus, systemImage: "heart.text.square", status: adapterStatusKind)
         MoreInfoRow(title: "Authorization", value: store.healthAuthorizationStatus, systemImage: "lock.shield", status: .ready)
-        MoreInfoRow(title: "Existing Goose Records", value: store.existingGooseRecordsStatus, systemImage: "externaldrive", status: .pending)
+        MoreInfoRow(title: "Existing Murmur Records", value: store.existingGooseRecordsStatus, systemImage: "externaldrive", status: .pending)
         MoreInfoRow(title: "Imported Sleep History", value: store.importedSleepHistoryStatus, systemImage: "bed.double", status: .pending)
         Button {
           store.refreshHealthAdapter()

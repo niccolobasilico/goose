@@ -961,7 +961,7 @@
 					"-force_load",
 					"$(SRCROOT)/Rust/$(PLATFORM_NAME)/libgoose_core.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.goose.swift;
+				PRODUCT_BUNDLE_IDENTIFIER = com.niccolo.murmur;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1004,7 +1004,7 @@
 					"-force_load",
 					"$(SRCROOT)/Rust/$(PLATFORM_NAME)/libgoose_core.a",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.goose.swift;
+				PRODUCT_BUNDLE_IDENTIFIER = com.niccolo.murmur;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1033,7 +1033,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goose.swift.WorkoutLiveActivityExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.niccolo.murmur.WorkoutLiveActivityExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1061,7 +1061,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goose.swift.WorkoutLiveActivityExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.niccolo.murmur.WorkoutLiveActivityExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

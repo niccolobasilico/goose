@@ -44,7 +44,7 @@ final class GooseAppModel: ObservableObject {
   @Published var overnightGuardSQLiteMirrorSummary = "SQLite mirror not started"
   @Published var overnightGuardPowerSummary = "Power not checked"
   @Published var overnightGuardWatchdogSummary = "Watchdog not checked"
-  @Published var overnightGuardWarning = "Keep the official WHOOP app closed until Goose final sync/export finishes."
+  @Published var overnightGuardWarning = "Keep the official WHOOP app closed until Murmur final sync/export finishes."
   @Published var overnightGuardExportStatus = "No overnight export"
   @Published var overnightGuardExportInProgress = false
   @Published var overnightGuardExportURL: URL?

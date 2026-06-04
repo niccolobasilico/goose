@@ -24,7 +24,7 @@ extension HealthDataStore {
       source: .unavailable(
         previewMissingData
           ? "preview missing cardio load data"
-          : "cardio load needs local Goose activity sessions and daily activity metrics"
+          : "cardio load needs local Murmur activity sessions and daily activity metrics"
       )
     )
   }

@@ -173,7 +173,7 @@ extension GooseAppModel {
       return
     }
 
-    let taskName = "Goose Overnight \(reason)"
+    let taskName = "Murmur Overnight \(reason)"
     let taskID = UIApplication.shared.beginBackgroundTask(withName: taskName) { [weak self] in
       Task { @MainActor [weak self] in
         self?.expireOvernightGuardCriticalBackgroundTask()
@@ -195,7 +195,7 @@ extension GooseAppModel {
   func expireOvernightGuardCriticalBackgroundTask() {
     let reason = overnightGuardCriticalBackgroundTaskReason ?? "unknown"
     ble.record(level: .warn, source: "overnight.guard", title: "background_task.expired", body: "reason=\(reason)")
-    overnightGuardStatus = "Background time expired during \(reason); keep Goose foregrounded if possible"
+    overnightGuardStatus = "Background time expired during \(reason); keep Murmur foregrounded if possible"
     endOvernightGuardCriticalBackgroundTask(reason: "expired_\(reason)")
     writeOvernightGuardStatus(reason: "background_task_expired")
   }

@@ -793,7 +793,7 @@ struct CardioLoadCalibrationSheet: View {
           .font(.title2.weight(.bold))
           .foregroundStyle(.white)
           .multilineTextAlignment(.center)
-        Text("Goose uses historical activity and heart-rate data to calibrate Cardio Load. Consistent workout logging improves the dynamic range, and up to 6 weeks of data gives the most reliable status.")
+        Text("Murmur uses historical activity and heart-rate data to calibrate Cardio Load. Consistent workout logging improves the dynamic range, and up to 6 weeks of data gives the most reliable status.")
           .font(.callout.weight(.semibold))
           .lineSpacing(5)
           .foregroundStyle(.white.opacity(0.58))

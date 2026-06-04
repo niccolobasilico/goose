@@ -89,7 +89,7 @@ final class HealthDataStore: ObservableObject {
 
   var localHealthExportText: String {
     [
-      "Goose Health Export",
+      "Murmur Health Export",
       "Catalog: \(catalogStatus)",
       "Band sleep import: \(bandSleepImportStatus)",
       "HealthKit metric import: disabled; profile weight only",

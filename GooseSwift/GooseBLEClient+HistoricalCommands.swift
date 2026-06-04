@@ -25,7 +25,7 @@ extension GooseBLEClient {
     }
     guard supportsV5HistoricalSync else {
       let characteristic = commandCharacteristic?.uuid.uuidString ?? "missing"
-      failHistoricalSync("Historical sync currently supports the Goose V5 fd4b command characteristic. Active command characteristic: \(characteristic).")
+      failHistoricalSync("Historical sync currently supports the Murmur V5 fd4b command characteristic. Active command characteristic: \(characteristic).")
       return
     }
 
