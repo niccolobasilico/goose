@@ -445,14 +445,7 @@ extension HealthDataStore {
   // MARK: - Punteggi storici importati (murmur-history)
 
   func importedDailyRecoveryScore(for date: Date, calendar: Calendar = .current) -> Double? {
-    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
-    for metric in dailyRecoveryMetrics() where metric["date_key"] as? String == dateKey {
-      if let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
-         let score = Self.doubleValue(inputs["imported_score_0_to_100"]) {
-        return score
-      }
-    }
-    return nil
+    historicalDayIndex.recoveryScoreByDateKey[Self.metricDateKey(for: date, calendar: calendar)]
   }
 
   func importedRecoveryScoreDisplayText(for date: Date, calendar: Calendar = .current) -> String? {
@@ -463,50 +456,11 @@ extension HealthDataStore {
   }
 
   func importedDailyStrain0To21(for date: Date, calendar: Calendar = .current) -> Double? {
-    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
-    for metric in dailyActivityMetrics(forDateKey: dateKey) {
-      if let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
-         let strain = Self.doubleValue(inputs["imported_strain"]) {
-        return strain
-      }
-    }
-    return nil
+    historicalDayIndex.strainByDateKey[Self.metricDateKey(for: date, calendar: calendar)]
   }
 
-  func importedSleepSessions() -> [[String: Any]] {
-    if let cached = importedSleepSessionsCache {
-      return cached
-    }
-    let computed = Self.array(packetInputReports["external_sleep"]?["sessions"])
-    importedSleepSessionsCache = computed
-    return computed
-  }
-
-  func importedSleepNight(for date: Date, calendar: Calendar = .current) -> [String: Any]? {
-    let sessions = importedSleepSessions()
-    guard !sessions.isEmpty else {
-      return nil
-    }
-    let dayStart = calendar.startOfDay(for: date)
-    guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
-      return nil
-    }
-    let startMS = Int64(dayStart.timeIntervalSince1970 * 1000)
-    let endMS = Int64(dayEnd.timeIntervalSince1970 * 1000)
-    return sessions
-      .filter { session in
-        // Prima il check di range (economico), il parse JSON solo per i match.
-        guard let end = Self.int64Value(session["end_time_unix_ms"]),
-              end >= startMS, end < endMS else {
-          return false
-        }
-        // La notte appartiene al giorno del risveglio; i nap sono esclusi.
-        let isNap = (Self.jsonObject(fromJSONString: session["provenance_json"])?["is_nap"] as? Bool) ?? false
-        return !isNap
-      }
-      .max { lhs, rhs in
-        (Self.int64Value(lhs["duration_ms"]) ?? 0) < (Self.int64Value(rhs["duration_ms"]) ?? 0)
-      }
+  func importedSleepNight(for date: Date, calendar: Calendar = .current) -> HistoricalSleepNight? {
+    historicalDayIndex.sleepNightByDateKey[Self.metricDateKey(for: date, calendar: calendar)]
   }
 
   struct ImportedSleepSummary {
@@ -520,27 +474,25 @@ extension HealthDataStore {
     guard let night = importedSleepNight(for: date, calendar: calendar) else {
       return nil
     }
-    let provenance = Self.jsonObject(fromJSONString: night["provenance_json"])
-    let scoreText = Self.doubleValue(provenance?["imported_performance_percent"])
+    let scoreText = night.performancePercent
       .flatMap { Self.numberText($0, fractionDigits: 0) }
       .map { "\($0)%" } ?? "--"
-    let stageSummary = Self.jsonObject(fromJSONString: night["stage_summary_json"])
-    let minutes = stageSummary?["minutes_by_stage"] as? [String: Any] ?? [:]
-    let asleepMinutes = ["light", "deep", "rem"]
-      .compactMap { Self.doubleValue(minutes[$0]) }
-      .reduce(0, +)
-    let inBedMinutes = (Self.int64Value(night["duration_ms"]) ?? 0) / 60_000
-    let stageParts = [("light", "leggero"), ("deep", "profondo"), ("rem", "REM"), ("awake", "veglia")]
-      .compactMap { key, label -> String? in
-        guard let value = Self.doubleValue(minutes[key]) else {
-          return nil
-        }
-        return "\(label) \(Self.importedMinutesText(value))"
+    let inBedMinutes = Double(night.durationMS) / 60_000
+    let stageParts = [
+      (night.lightMinutes, "leggero"),
+      (night.deepMinutes, "profondo"),
+      (night.remMinutes, "REM"),
+      (night.awakeMinutes, "veglia"),
+    ].compactMap { value, label -> String? in
+      guard let value else {
+        return nil
       }
+      return "\(label) \(Self.importedMinutesText(value))"
+    }
     return ImportedSleepSummary(
       scoreText: scoreText,
-      durationText: Self.importedMinutesText(asleepMinutes),
-      inBedText: Self.importedMinutesText(Double(inBedMinutes)),
+      durationText: Self.importedMinutesText(night.asleepMinutes),
+      inBedText: Self.importedMinutesText(inBedMinutes),
       stagesText: stageParts.isEmpty ? "No stage data" : stageParts.joined(separator: " | ")
     )
   }
@@ -552,20 +504,7 @@ extension HealthDataStore {
 
   // Mappa date_key -> recovery WHOOP importato, per colorare il calendario.
   func recoveryScoreByDateKey() -> [String: Double] {
-    if let cached = recoveryScoreByDateKeyCache {
-      return cached
-    }
-    var map: [String: Double] = [:]
-    for metric in dailyRecoveryMetrics() {
-      guard let dateKey = metric["date_key"] as? String,
-            let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
-            let score = Self.doubleValue(inputs["imported_score_0_to_100"]) else {
-        continue
-      }
-      map[dateKey] = score
-    }
-    recoveryScoreByDateKeyCache = map
-    return map
+    historicalDayIndex.recoveryScoreByDateKey
   }
 
   func strainTargetDisplayText() -> String {
@@ -772,9 +711,11 @@ extension HealthDataStore {
   }
 
   func stepMetric(for date: Date, calendar: Calendar = .current) -> [String: Any]? {
-    Self.preferredStepMetric(
-      from: dailyActivityMetrics(forDateKey: Self.metricDateKey(for: date, calendar: calendar))
-    )
+    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
+    guard let entry = historicalDayIndex.activityValuesByDateKey[dateKey]?["steps"] else {
+      return nil
+    }
+    return Self.historicalMetricRow(dateKey: dateKey, valueKey: "steps", entry: entry)
   }
 
   func energyMetric(
@@ -782,10 +723,11 @@ extension HealthDataStore {
     calendar: Calendar = .current,
     valueKey: String
   ) -> [String: Any]? {
-    Self.preferredDailyActivityMetric(
-      from: dailyActivityMetrics(forDateKey: Self.metricDateKey(for: date, calendar: calendar)),
-      valueKey: valueKey
-    )
+    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
+    guard let entry = historicalDayIndex.activityValuesByDateKey[dateKey]?[valueKey] else {
+      return nil
+    }
+    return Self.historicalMetricRow(dateKey: dateKey, valueKey: valueKey, entry: entry)
   }
 
   func dailyActivityMetrics() -> [[String: Any]] {

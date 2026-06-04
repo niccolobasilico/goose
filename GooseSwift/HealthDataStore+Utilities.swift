@@ -178,7 +178,7 @@ extension HealthDataStore {
     return string
   }
 
-  static func jsonObject(fromJSONString value: Any?) -> [String: Any]? {
+  nonisolated static func jsonObject(fromJSONString value: Any?) -> [String: Any]? {
     guard let string = value as? String,
           let data = string.data(using: .utf8),
           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -355,7 +355,7 @@ extension HealthDataStore {
     boolValue(value).map { $0 ? "true" : "false" } ?? "unknown"
   }
 
-  static func intValue(_ value: Any?) -> Int? {
+  nonisolated static func intValue(_ value: Any?) -> Int? {
     if let int = value as? Int {
       return int
     }
@@ -365,7 +365,7 @@ extension HealthDataStore {
     return nil
   }
 
-  static func int64Value(_ value: Any?) -> Int64? {
+  nonisolated static func int64Value(_ value: Any?) -> Int64? {
     if let int64 = value as? Int64 {
       return int64
     }
@@ -381,7 +381,7 @@ extension HealthDataStore {
     return nil
   }
 
-  static func doubleValue(_ value: Any?) -> Double? {
+  nonisolated static func doubleValue(_ value: Any?) -> Double? {
     if let double = value as? Double {
       return double
     }

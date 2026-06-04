@@ -25,12 +25,17 @@ extension HealthDataStore {
   }
 
   func dailyRecoveryMetricsWithValue(_ valueKey: String) -> [[String: Any]] {
-    dailyRecoveryMetrics()
+    if let cached = recoveryValueRowsCache[valueKey] {
+      return cached
+    }
+    let computed = dailyRecoveryMetrics()
       .filter { metric in
         metric["source_kind"] as? String == "device_sensor"
           && Self.doubleValue(metric[valueKey]) != nil
           && Self.doubleValue(metric["confidence"]) != nil
       }
+    recoveryValueRowsCache[valueKey] = computed
+    return computed
   }
 
   func dailyRecoveryUnavailableMetrics() -> [[String: Any]] {
@@ -163,11 +168,13 @@ extension HealthDataStore {
     for date: Date,
     calendar: Calendar = .current
   ) -> [String: Any]? {
+    // Lookup O(1) sull'indice precalcolato: l'index e' costruito dalle stesse
+    // righe display-safe device_sensor con lo stesso criterio di preferenza.
     let dateKey = Self.metricDateKey(for: date, calendar: calendar)
-    return Self.preferredDailyRecoveryMetric(
-      from: dailyRecoveryMetricsWithValue(valueKey).filter { $0["date_key"] as? String == dateKey },
-      valueKey: valueKey
-    )
+    guard let entry = historicalDayIndex.recoveryValuesByDateKey[dateKey]?[valueKey] else {
+      return nil
+    }
+    return Self.historicalMetricRow(dateKey: dateKey, valueKey: valueKey, entry: entry)
   }
 
   static func preferredDailyRecoveryMetric(from metrics: [[String: Any]], valueKey: String) -> [String: Any]? {

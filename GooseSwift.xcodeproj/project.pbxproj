@@ -67,6 +67,7 @@
 		A10000000000000000000005 /* ConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* ConnectionView.swift */; };
 		A10000000000000000000006 /* GooseRustBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* GooseRustBridge.swift */; };
 		A1000000000000000000FE01 /* MoreHistoryImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000FE01 /* MoreHistoryImport.swift */; };
+		A1000000000000000000FE02 /* HealthDataStore+HistoricalIndex.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000FE02 /* HealthDataStore+HistoricalIndex.swift */; };
 		A10000000000000000000007 /* GooseHello.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* GooseHello.swift */; };
 		A10000000000000000000008 /* GooseBLEClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* GooseBLEClient.swift */; };
 			D10000000000000000000032 /* GooseBLETypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20000000000000000000032 /* GooseBLETypes.swift */; };
@@ -210,6 +211,7 @@
 		A20000000000000000000005 /* ConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionView.swift; sourceTree = "<group>"; };
 		A20000000000000000000006 /* GooseRustBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooseRustBridge.swift; sourceTree = "<group>"; };
 		A2000000000000000000FE01 /* MoreHistoryImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHistoryImport.swift; sourceTree = "<group>"; };
+		A2000000000000000000FE02 /* HealthDataStore+HistoricalIndex.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthDataStore+HistoricalIndex.swift"; sourceTree = "<group>"; };
 		A20000000000000000000007 /* GooseHello.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooseHello.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* GooseBLEClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooseBLEClient.swift; sourceTree = "<group>"; };
 			D20000000000000000000032 /* GooseBLETypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooseBLETypes.swift; sourceTree = "<group>"; };
@@ -477,6 +479,7 @@
 					B20000000000000000000002 /* WorkoutLiveActivityController.swift */,
 				A20000000000000000000006 /* GooseRustBridge.swift */,
 				A2000000000000000000FE01 /* MoreHistoryImport.swift */,
+				A2000000000000000000FE02 /* HealthDataStore+HistoricalIndex.swift */,
 				A20000000000000000000007 /* GooseHello.swift */,
 				A20000000000000000000008 /* GooseBLEClient.swift */,
 				D20000000000000000000032 /* GooseBLETypes.swift */,
@@ -783,6 +786,7 @@
 					B10000000000000000000002 /* WorkoutLiveActivityController.swift in Sources */,
 					A10000000000000000000006 /* GooseRustBridge.swift in Sources */,
 					A1000000000000000000FE01 /* MoreHistoryImport.swift in Sources */,
+					A1000000000000000000FE02 /* HealthDataStore+HistoricalIndex.swift in Sources */,
 				A10000000000000000000007 /* GooseHello.swift in Sources */,
 				A10000000000000000000008 /* GooseBLEClient.swift in Sources */,
 				D10000000000000000000032 /* GooseBLETypes.swift in Sources */,

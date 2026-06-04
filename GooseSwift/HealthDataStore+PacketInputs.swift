@@ -4,7 +4,9 @@ import SwiftUI
 import UIKit
 
 extension HealthDataStore {
-  nonisolated static func packetInputBridgeReports(databasePath: String) -> Result<[String: [String: Any]], Error> {
+  nonisolated static func packetInputBridgeReports(
+    databasePath: String
+  ) -> Result<(reports: [String: [String: Any]], index: HistoricalDayIndex), Error> {
     let bridge = GooseRustBridge()
     let baseArgs: [String: Any] = [
       "database_path": databasePath,
@@ -131,7 +133,13 @@ extension HealthDataStore {
       ) {
         reports["external_sleep"] = externalSleep
       }
-      return .success(reports)
+      // Indice O(1) per il render path, costruito qui in background una volta.
+      let index = buildHistoricalDayIndex(
+        recoveryRows: array(reports["daily_recovery"]?["metrics_display_safe"]),
+        activityRows: array(reports["daily_activity"]?["metrics_display_safe"]),
+        sleepSessions: array(reports["external_sleep"]?["sessions"])
+      )
+      return .success((reports: reports, index: index))
     } catch {
       return .failure(error)
     }

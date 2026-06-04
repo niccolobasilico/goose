@@ -8,18 +8,26 @@ extension HealthDataStore {
     if previewMissingData {
       return []
     }
+    // Memoizzati: dipendono solo dai report, ricalcolarli a ogni render
+    // (filter+sort su ~500 righe per metrica) saturava il main thread.
+    if let cached = trendSnapshotsCache[route.rawValue] {
+      return cached
+    }
+    let computed: [HealthMetricSnapshot]
     switch route {
     case .sleep:
-      return Self.sleepTrendRows
+      computed = Self.sleepTrendRows
     case .recovery:
-      return recoveryTrendRowsForV2()
+      computed = recoveryTrendRowsForV2()
     case .strain:
-      return strainTrendRowsForV2()
+      computed = strainTrendRowsForV2()
     case .stress:
-      return stressTrendRowsForV2()
+      computed = stressTrendRowsForV2()
     default:
-      return []
+      computed = []
     }
+    trendSnapshotsCache[route.rawValue] = computed
+    return computed
   }
 
   func recoveryTrendRowsForV2() -> [HealthMetricSnapshot] {
@@ -306,7 +314,7 @@ extension HealthDataStore {
 
   func recoveryTrendOverviewRows() -> [HealthMetricSnapshot] {
     let bridgeRows = Dictionary(
-      uniqueKeysWithValues: recoveryTrendRowsForV2().map { ($0.id, $0) }
+      uniqueKeysWithValues: trendRows(for: .recovery).map { ($0.id, $0) }
     )
     return Self.recoveryTrendRows.map { bridgeRows[$0.id] ?? $0 }
   }

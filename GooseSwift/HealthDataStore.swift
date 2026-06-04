@@ -31,7 +31,8 @@ final class HealthDataStore: ObservableObject {
       dailyRecoveryMetricsCache = nil
       dailyActivityMetricsCache = nil
       importedSleepSessionsCache = nil
-      recoveryScoreByDateKeyCache = nil
+      recoveryValueRowsCache = [:]
+      trendSnapshotsCache = [:]
     }
   }
   // Cache dei filtri display-safe: il parsing JSON di ~500 righe a ogni accesso
@@ -39,8 +40,15 @@ final class HealthDataStore: ObservableObject {
   var dailyRecoveryMetricsCache: [[String: Any]]?
   var dailyActivityMetricsCache: [[String: Any]]?
   var importedSleepSessionsCache: [[String: Any]]?
-  var recoveryScoreByDateKeyCache: [String: Double]?
-  var packetScoreReports: [String: [String: Any]] = [:]
+  var recoveryValueRowsCache: [String: [[String: Any]]] = [:]
+  var trendSnapshotsCache: [String: [HealthMetricSnapshot]] = [:]
+  // Indice O(1) dei dati storici, costruito in background insieme ai report.
+  var historicalDayIndex: HistoricalDayIndex = .empty
+  var packetScoreReports: [String: [String: Any]] = [:] {
+    didSet {
+      trendSnapshotsCache = [:]
+    }
+  }
   var referenceComparisonReports: [String: [String: Any]] = [:]
   var packetInputRefreshWorkItem: DispatchWorkItem?
   var packetInputRunID: UUID?
@@ -265,8 +273,9 @@ final class HealthDataStore: ObservableObject {
         }
         self.packetInputIsRunning = false
         switch result {
-        case .success(let reports):
-          self.packetInputReports = reports
+        case .success(let payload):
+          self.historicalDayIndex = payload.index
+          self.packetInputReports = payload.reports
           self.packetInputStatus = "Bridge packet-derived inputs extracted"
         case .failure(let error):
           self.packetInputStatus = "Bridge input extraction blocked: \(HealthDataStore.shortError(error))"
