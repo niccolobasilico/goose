@@ -113,6 +113,13 @@ extension HealthDataStore {
         method: "metrics.daily_recovery_metrics",
         args: dailyRecoveryMetricListArgs(databasePath: databasePath)
       )
+      // Notti importate (murmur-history): best-effort, non blocca gli altri report.
+      if let externalSleep = try? bridge.request(
+        method: "sleep.list_external_sessions",
+        args: externalSleepSessionListArgs(databasePath: databasePath)
+      ) {
+        reports["external_sleep"] = externalSleep
+      }
       return .success(reports)
     } catch {
       return .failure(error)
@@ -220,6 +227,15 @@ extension HealthDataStore {
   // 2023-07-01 UTC: prima data possibile dello storico importato via murmur-history.
   nonisolated static var importedHistoryFloor: Date {
     Date(timeIntervalSince1970: 1_688_169_600)
+  }
+
+  nonisolated static func externalSleepSessionListArgs(databasePath: String) -> [String: Any] {
+    let window = currentDailyMetricWindow()
+    return [
+      "database_path": databasePath,
+      "start_time_unix_ms": Int64((importedHistoryFloor.timeIntervalSince1970 * 1000).rounded()),
+      "end_time_unix_ms": window.endTimeUnixMS,
+    ]
   }
 
   nonisolated static func hourlyActivityMetricListArgs(databasePath: String) -> [String: Any] {

@@ -186,6 +186,44 @@ fn whoop_history_batch_conflict_does_not_abort() {
 }
 
 #[test]
+fn external_sleep_sessions_listable_after_import() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db = tempdir.path().join("goose.sqlite");
+    let db_path = db.display().to_string();
+
+    let imported = request(serde_json::json!({
+        "schema": "goose.bridge.request.v1",
+        "request_id": "whoop-import-list-1",
+        "method": "import.whoop_history_batch",
+        "args": sample_batch_args(&db_path)
+    }));
+    assert!(imported.ok, "{:?}", imported.error);
+
+    let listed = request(serde_json::json!({
+        "schema": "goose.bridge.request.v1",
+        "request_id": "whoop-import-list-2",
+        "method": "sleep.list_external_sessions",
+        "args": {
+            "database_path": db_path,
+            "start_time_unix_ms": 0i64,
+            "end_time_unix_ms": 4102444800000i64
+        }
+    }));
+    assert!(listed.ok, "{:?}", listed.error);
+    let result = listed.result.unwrap();
+    assert_eq!(result["session_count"], 1);
+    let session = &result["sessions"][0];
+    assert_eq!(session["platform"], "import");
+    let provenance: serde_json::Value =
+        serde_json::from_str(session["provenance_json"].as_str().unwrap()).unwrap();
+    assert_eq!(provenance["imported_performance_percent"], 70.0);
+    assert_eq!(provenance["is_nap"], false);
+    let summary: serde_json::Value =
+        serde_json::from_str(session["stage_summary_json"].as_str().unwrap()).unwrap();
+    assert_eq!(summary["minutes_by_stage"]["deep"], 103.0);
+}
+
+#[test]
 fn whoop_history_batch_rejects_forbidden_activity_type() {
     let tempdir = tempfile::tempdir().unwrap();
     let db = tempdir.path().join("goose.sqlite");

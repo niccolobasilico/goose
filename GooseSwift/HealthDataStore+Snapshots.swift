@@ -367,7 +367,8 @@ extension HealthDataStore {
 
   func strainScore0To100(for date: Date = Date(), calendar: Calendar = .current) -> Double {
     guard calendar.isDate(calendar.startOfDay(for: date), inSameDayAs: calendar.startOfDay(for: Date())) else {
-      return 0
+      // Date storiche: sforzo WHOOP importato (scala 0-21) se presente.
+      return importedDailyStrain0To21(for: date, calendar: calendar).map(Self.strainPercent) ?? 0
     }
     return currentStrainScore0To21().map(Self.strainPercent) ?? 0
   }
@@ -381,11 +382,114 @@ extension HealthDataStore {
   }
 
   func strainStatusText(for date: Date = Date(), calendar: Calendar = .current) -> String {
-    guard calendar.isDate(calendar.startOfDay(for: date), inSameDayAs: calendar.startOfDay(for: Date())),
-          let rawScore = currentStrainScore0To21() else {
+    let isToday = calendar.isDate(calendar.startOfDay(for: date), inSameDayAs: calendar.startOfDay(for: Date()))
+    if !isToday {
+      guard let imported = importedDailyStrain0To21(for: date, calendar: calendar) else {
+        return "No strain data"
+      }
+      return Self.strainStatusLabel(score: Self.strainPercent(imported))
+    }
+    guard let rawScore = currentStrainScore0To21() else {
       return "No strain data"
     }
     return Self.strainStatusLabel(score: Self.strainPercent(rawScore))
+  }
+
+  // MARK: - Punteggi storici importati (murmur-history)
+
+  func importedDailyRecoveryScore(for date: Date, calendar: Calendar = .current) -> Double? {
+    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
+    for metric in dailyRecoveryMetrics() where metric["date_key"] as? String == dateKey {
+      if let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
+         let score = Self.doubleValue(inputs["imported_score_0_to_100"]) {
+        return score
+      }
+    }
+    return nil
+  }
+
+  func importedRecoveryScoreDisplayText(for date: Date, calendar: Calendar = .current) -> String? {
+    guard let score = importedDailyRecoveryScore(for: date, calendar: calendar) else {
+      return nil
+    }
+    return Self.numberText(score, fractionDigits: 0)
+  }
+
+  func importedDailyStrain0To21(for date: Date, calendar: Calendar = .current) -> Double? {
+    let dateKey = Self.metricDateKey(for: date, calendar: calendar)
+    for metric in dailyActivityMetrics(forDateKey: dateKey) {
+      if let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
+         let strain = Self.doubleValue(inputs["imported_strain"]) {
+        return strain
+      }
+    }
+    return nil
+  }
+
+  func importedSleepNight(for date: Date, calendar: Calendar = .current) -> [String: Any]? {
+    let sessions = Self.array(packetInputReports["external_sleep"]?["sessions"])
+    guard !sessions.isEmpty else {
+      return nil
+    }
+    let dayStart = calendar.startOfDay(for: date)
+    guard let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) else {
+      return nil
+    }
+    let startMS = Int64(dayStart.timeIntervalSince1970 * 1000)
+    let endMS = Int64(dayEnd.timeIntervalSince1970 * 1000)
+    return sessions
+      .filter { session in
+        guard let end = Self.int64Value(session["end_time_unix_ms"]) else {
+          return false
+        }
+        // La notte appartiene al giorno del risveglio; i nap sono esclusi.
+        let isNap = (Self.jsonObject(fromJSONString: session["provenance_json"])?["is_nap"] as? Bool) ?? false
+        return end >= startMS && end < endMS && !isNap
+      }
+      .max { lhs, rhs in
+        (Self.int64Value(lhs["duration_ms"]) ?? 0) < (Self.int64Value(rhs["duration_ms"]) ?? 0)
+      }
+  }
+
+  struct ImportedSleepSummary {
+    let scoreText: String
+    let durationText: String
+    let inBedText: String
+    let stagesText: String
+  }
+
+  func importedSleepSummary(for date: Date, calendar: Calendar = .current) -> ImportedSleepSummary? {
+    guard let night = importedSleepNight(for: date, calendar: calendar) else {
+      return nil
+    }
+    let provenance = Self.jsonObject(fromJSONString: night["provenance_json"])
+    let scoreText = Self.doubleValue(provenance?["imported_performance_percent"])
+      .flatMap { Self.numberText($0, fractionDigits: 0) }
+      .map { "\($0)%" } ?? "--"
+    let stageSummary = Self.jsonObject(fromJSONString: night["stage_summary_json"])
+    let minutes = stageSummary?["minutes_by_stage"] as? [String: Any] ?? [:]
+    let asleepMinutes = ["light", "deep", "rem"]
+      .compactMap { Self.doubleValue(minutes[$0]) }
+      .reduce(0, +)
+    let inBedMinutes = (Self.int64Value(night["duration_ms"]) ?? 0) / 60_000
+    let stageParts = [("light", "leggero"), ("deep", "profondo"), ("rem", "REM"), ("awake", "veglia")]
+      .compactMap { key, label -> String? in
+        guard let value = Self.doubleValue(minutes[key]) else {
+          return nil
+        }
+        return "\(label) \(Self.importedMinutesText(value))"
+      }
+    return ImportedSleepSummary(
+      scoreText: scoreText,
+      durationText: Self.importedMinutesText(asleepMinutes),
+      inBedText: Self.importedMinutesText(Double(inBedMinutes)),
+      stagesText: stageParts.isEmpty ? "No stage data" : stageParts.joined(separator: " | ")
+    )
+  }
+
+  static func importedMinutesText(_ minutes: Double) -> String {
+    let total = Int(minutes.rounded())
+    return String(format: "%d:%02d", total / 60, total % 60)
   }
 
   func strainTargetDisplayText() -> String {

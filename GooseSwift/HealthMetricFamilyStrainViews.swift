@@ -160,6 +160,16 @@ struct HealthMetricFamilyView: View {
   private var heroRows: [HealthSummaryRow] {
     switch route {
     case .sleep:
+      let selectedDate = selectedDateBinding.wrappedValue
+      let isToday = Calendar.current.isDate(selectedDate, inSameDayAs: Date())
+      if !isToday, let imported = store.importedSleepSummary(for: selectedDate) {
+        return [
+          HealthSummaryRow("Quality", value: imported.scoreText, source: .bridge("murmur history import"), systemImage: "bed.double"),
+          HealthSummaryRow("Time in bed", value: imported.inBedText, source: .bridge("murmur history import"), systemImage: "clock"),
+          HealthSummaryRow("Time asleep", value: imported.durationText, source: .bridge("murmur history import"), systemImage: "moon.zzz"),
+          HealthSummaryRow("Stages", value: imported.stagesText, source: .bridge("murmur history import"), systemImage: "chart.bar"),
+        ]
+      }
       return [
         HealthSummaryRow("Quality", value: primarySleepQualitySummary, source: store.packetScoreSource("sleep score output"), systemImage: "bed.double"),
         HealthSummaryRow("Time in bed", value: store.primarySleep()?.timeInBedText ?? "No data", source: store.packetScoreSource("sleep window"), systemImage: "clock"),
@@ -173,8 +183,14 @@ struct HealthMetricFamilyView: View {
       return [
         HealthSummaryRow(
           "Recovery Score",
-          value: isToday ? store.recoveryScoreDisplayText() : "--",
-          source: isToday ? store.snapshot(for: .recovery).source : .unavailable("selected date has no stored recovery score"),
+          value: isToday
+            ? store.recoveryScoreDisplayText()
+            : (store.importedRecoveryScoreDisplayText(for: selectedDate) ?? "--"),
+          source: isToday
+            ? store.snapshot(for: .recovery).source
+            : (store.importedDailyRecoveryScore(for: selectedDate) != nil
+              ? .bridge("murmur history import")
+              : .unavailable("selected date has no stored recovery score")),
           systemImage: "battery.100percent"
         ),
         HealthSummaryRow("Resting HRV", value: store.recoveryHRVDisplayText(for: selectedDate), source: store.recoveryHRVSource(for: selectedDate), systemImage: "waveform.path.ecg"),
@@ -188,7 +204,11 @@ struct HealthMetricFamilyView: View {
         HealthSummaryRow(
           "Strain Score",
           value: store.strainScoreDisplayText(for: selectedDate),
-          source: isToday ? store.snapshot(for: .strain).source : .unavailable("selected date has no stored strain score"),
+          source: isToday
+            ? store.snapshot(for: .strain).source
+            : (store.importedDailyStrain0To21(for: selectedDate) != nil
+              ? .bridge("murmur history import")
+              : .unavailable("selected date has no stored strain score")),
           systemImage: "figure.run"
         ),
         HealthSummaryRow("Target strain", value: store.strainTargetDisplayText(), source: .unavailable("strain target unavailable"), systemImage: "target"),

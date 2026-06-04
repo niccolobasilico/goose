@@ -1508,6 +1508,13 @@ struct ExternalSleepStageBridgeInput {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct ExternalSleepSessionListArgs {
+    database_path: String,
+    start_time_unix_ms: i64,
+    end_time_unix_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct ImportWhoopHistoryBatchArgs {
     database_path: String,
     #[serde(default)]
@@ -2450,6 +2457,10 @@ fn handle_bridge_request_inner(request: BridgeRequest) -> BridgeResponse {
             .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
         "import.whoop_history_batch" => request_args::<ImportWhoopHistoryBatchArgs>(&request)
             .and_then(import_whoop_history_batch_bridge)
+            .map(|value| bridge_ok(&request.request_id, value))
+            .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
+        "sleep.list_external_sessions" => request_args::<ExternalSleepSessionListArgs>(&request)
+            .and_then(external_sleep_session_list_bridge)
             .map(|value| bridge_ok(&request.request_id, value))
             .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
         "sleep.add_correction_label" => request_args::<SleepCorrectionLabelArgs>(&request)
@@ -6103,6 +6114,20 @@ fn external_sleep_history_import_bridge(
         "inserted_stage_count": inserted_stages,
         "unchanged_stage_count": unchanged_stages,
         "import_policy": "external_history_context_only",
+    }))
+}
+
+fn external_sleep_session_list_bridge(
+    args: ExternalSleepSessionListArgs,
+) -> GooseResult<serde_json::Value> {
+    let store = open_bridge_store(&args.database_path)?;
+    let sessions =
+        store.external_sleep_sessions_between(args.start_time_unix_ms, args.end_time_unix_ms)?;
+    Ok(json!({
+        "schema": "goose.external-sleep-session-list.v1",
+        "generated_by": "goose-bridge",
+        "session_count": sessions.len(),
+        "sessions": sessions,
     }))
 }
 
