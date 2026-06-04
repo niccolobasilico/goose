@@ -148,7 +148,8 @@ use crate::{
         ActivityIntervalInput, ActivityMetricInput, ActivityMetricRow, ActivitySessionInput,
         ActivitySessionRow, AlgorithmPreferenceRecord, AlgorithmRunRecord, CURRENT_SCHEMA_VERSION,
         CalibrationLabelInput, CalibrationLabelRow, CaptureSessionInput, CaptureSessionRow,
-        CommandValidationRecord, DecodedFrameRow, ExternalSleepSessionInput,
+        CommandValidationRecord, DailyActivityMetricInput, DailyRecoveryMetricInput,
+        DecodedFrameRow, ExternalSleepSessionInput,
         ExternalSleepSessionRow, ExternalSleepStageInput, ExternalSleepStageRow, GooseStore,
         OvernightHistoricalRangePollInput, OvernightRawNotificationInput,
         OvernightSyncSessionInput, SleepCorrectionLabelInput,
@@ -1507,6 +1508,107 @@ struct ExternalSleepStageBridgeInput {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+struct ImportWhoopHistoryBatchArgs {
+    database_path: String,
+    #[serde(default)]
+    recovery: Vec<ImportDailyRecoveryInput>,
+    #[serde(default)]
+    activity: Vec<ImportDailyActivityInput>,
+    #[serde(default)]
+    sleep: Vec<ImportSleepNightInput>,
+    #[serde(default)]
+    workouts: Vec<ImportWorkoutInput>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ImportDailyRecoveryInput {
+    import_key: String,
+    date_key: String,
+    timezone: String,
+    start_time_unix_ms: i64,
+    end_time_unix_ms: i64,
+    #[serde(default)]
+    resting_hr_bpm: Option<f64>,
+    #[serde(default)]
+    hrv_rmssd_ms: Option<f64>,
+    #[serde(default)]
+    respiratory_rate_rpm: Option<f64>,
+    #[serde(default)]
+    oxygen_saturation_percent: Option<f64>,
+    #[serde(default)]
+    skin_temperature_delta_c: Option<f64>,
+    #[serde(default)]
+    imported_score_0_to_100: Option<f64>,
+    confidence: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ImportDailyActivityInput {
+    import_key: String,
+    date_key: String,
+    timezone: String,
+    start_time_unix_ms: i64,
+    end_time_unix_ms: i64,
+    #[serde(default)]
+    steps: Option<i64>,
+    #[serde(default)]
+    active_kcal: Option<f64>,
+    #[serde(default)]
+    resting_kcal: Option<f64>,
+    #[serde(default)]
+    total_kcal: Option<f64>,
+    #[serde(default)]
+    average_cadence_spm: Option<f64>,
+    #[serde(default)]
+    imported_strain: Option<f64>,
+    confidence: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ImportSleepNightInput {
+    import_key: String,
+    #[serde(default)]
+    platform_record_id: Option<String>,
+    start_time_unix_ms: i64,
+    end_time_unix_ms: i64,
+    #[serde(default)]
+    timezone: Option<String>,
+    minutes_by_stage: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    is_nap: bool,
+    #[serde(default)]
+    imported_performance_percent: Option<f64>,
+    #[serde(default)]
+    imported_efficiency_percent: Option<f64>,
+    #[serde(default)]
+    imported_regularity_percent: Option<f64>,
+    confidence: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ImportWorkoutInput {
+    import_key: String,
+    start_time_unix_ms: i64,
+    end_time_unix_ms: i64,
+    activity_type: String,
+    #[serde(default)]
+    external_activity_type_name: Option<String>,
+    #[serde(default)]
+    custom_label: Option<String>,
+    #[serde(default)]
+    kcal: Option<f64>,
+    #[serde(default)]
+    hr_max: Option<f64>,
+    #[serde(default)]
+    hr_avg: Option<f64>,
+    #[serde(default)]
+    imported_strain: Option<f64>,
+    #[serde(default)]
+    hr_zone_seconds: Option<serde_json::Map<String, serde_json::Value>>,
+    confidence: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 struct SleepCorrectionLabelArgs {
     database_path: String,
     label_id: String,
@@ -2344,6 +2446,10 @@ fn handle_bridge_request_inner(request: BridgeRequest) -> BridgeResponse {
         }
         "sleep.import_external_history" => request_args::<ExternalSleepHistoryImportArgs>(&request)
             .and_then(external_sleep_history_import_bridge)
+            .map(|value| bridge_ok(&request.request_id, value))
+            .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
+        "import.whoop_history_batch" => request_args::<ImportWhoopHistoryBatchArgs>(&request)
+            .and_then(import_whoop_history_batch_bridge)
             .map(|value| bridge_ok(&request.request_id, value))
             .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
         "sleep.add_correction_label" => request_args::<SleepCorrectionLabelArgs>(&request)
@@ -5998,6 +6104,222 @@ fn external_sleep_history_import_bridge(
         "unchanged_stage_count": unchanged_stages,
         "import_policy": "external_history_context_only",
     }))
+}
+
+const IMPORT_HISTORY_ORIGIN: &str = "murmur_history_v1";
+const IMPORT_HISTORY_SOURCE: &str = "murmur_history_import";
+
+fn import_conflict_error(error: &GooseError) -> bool {
+    error
+        .to_string()
+        .contains("already exists with different metadata")
+}
+
+fn import_whoop_history_batch_bridge(
+    args: ImportWhoopHistoryBatchArgs,
+) -> GooseResult<serde_json::Value> {
+    let store = open_bridge_store(&args.database_path)?;
+    let result = store.immediate_transaction(|store| {
+        let mut recovery_written = 0usize;
+        let mut recovery_unchanged = 0usize;
+        for entry in &args.recovery {
+            let mut inputs = serde_json::Map::new();
+            inputs.insert(
+                "import_origin".to_string(),
+                json!(IMPORT_HISTORY_ORIGIN),
+            );
+            if let Some(score) = entry.imported_score_0_to_100 {
+                inputs.insert("imported_score_0_to_100".to_string(), json!(score));
+            }
+            let inputs_json = serde_json::Value::Object(inputs).to_string();
+            let provenance_json = json!({ "import_origin": IMPORT_HISTORY_ORIGIN }).to_string();
+            if store.upsert_daily_recovery_metric(DailyRecoveryMetricInput {
+                daily_metric_id: &entry.import_key,
+                date_key: &entry.date_key,
+                timezone: &entry.timezone,
+                start_time_unix_ms: entry.start_time_unix_ms,
+                end_time_unix_ms: entry.end_time_unix_ms,
+                resting_hr_bpm: entry.resting_hr_bpm,
+                hrv_rmssd_ms: entry.hrv_rmssd_ms,
+                respiratory_rate_rpm: entry.respiratory_rate_rpm,
+                oxygen_saturation_percent: entry.oxygen_saturation_percent,
+                skin_temperature_delta_c: entry.skin_temperature_delta_c,
+                source_kind: "device_sensor",
+                confidence: entry.confidence,
+                inputs_json: &inputs_json,
+                quality_flags_json: "[]",
+                provenance_json: &provenance_json,
+            })? {
+                recovery_written += 1;
+            } else {
+                recovery_unchanged += 1;
+            }
+        }
+
+        let mut activity_written = 0usize;
+        let mut activity_unchanged = 0usize;
+        for entry in &args.activity {
+            let mut inputs = serde_json::Map::new();
+            inputs.insert(
+                "import_origin".to_string(),
+                json!(IMPORT_HISTORY_ORIGIN),
+            );
+            if let Some(strain) = entry.imported_strain {
+                inputs.insert("imported_strain".to_string(), json!(strain));
+            }
+            let inputs_json = serde_json::Value::Object(inputs).to_string();
+            let provenance_json = json!({ "import_origin": IMPORT_HISTORY_ORIGIN }).to_string();
+            if store.upsert_daily_activity_metric(DailyActivityMetricInput {
+                daily_metric_id: &entry.import_key,
+                date_key: &entry.date_key,
+                timezone: &entry.timezone,
+                start_time_unix_ms: entry.start_time_unix_ms,
+                end_time_unix_ms: entry.end_time_unix_ms,
+                steps: entry.steps,
+                active_kcal: entry.active_kcal,
+                resting_kcal: entry.resting_kcal,
+                total_kcal: entry.total_kcal,
+                average_cadence_spm: entry.average_cadence_spm,
+                source_kind: "local_estimate",
+                confidence: entry.confidence,
+                inputs_json: &inputs_json,
+                quality_flags_json: "[]",
+                provenance_json: &provenance_json,
+            })? {
+                activity_written += 1;
+            } else {
+                activity_unchanged += 1;
+            }
+        }
+
+        let mut sleep_inserted = 0usize;
+        let mut sleep_unchanged = 0usize;
+        let mut sleep_conflicts = 0usize;
+        for entry in &args.sleep {
+            let stage_summary_json = json!({
+                "minutes_by_stage": serde_json::Value::Object(entry.minutes_by_stage.clone()),
+            })
+            .to_string();
+            let mut provenance = serde_json::Map::new();
+            provenance.insert(
+                "import_origin".to_string(),
+                json!(IMPORT_HISTORY_ORIGIN),
+            );
+            provenance.insert("is_nap".to_string(), json!(entry.is_nap));
+            if let Some(value) = entry.imported_performance_percent {
+                provenance.insert("imported_performance_percent".to_string(), json!(value));
+            }
+            if let Some(value) = entry.imported_efficiency_percent {
+                provenance.insert("imported_efficiency_percent".to_string(), json!(value));
+            }
+            if let Some(value) = entry.imported_regularity_percent {
+                provenance.insert("imported_regularity_percent".to_string(), json!(value));
+            }
+            let provenance_json = serde_json::Value::Object(provenance).to_string();
+            match store.insert_external_sleep_session(ExternalSleepSessionInput {
+                sleep_id: &entry.import_key,
+                source: IMPORT_HISTORY_SOURCE,
+                platform: "import",
+                platform_record_id: entry.platform_record_id.as_deref(),
+                start_time_unix_ms: entry.start_time_unix_ms,
+                end_time_unix_ms: entry.end_time_unix_ms,
+                timezone: entry.timezone.as_deref(),
+                stage_summary_json: &stage_summary_json,
+                confidence: entry.confidence,
+                provenance_json: &provenance_json,
+            }) {
+                Ok(true) => sleep_inserted += 1,
+                Ok(false) => sleep_unchanged += 1,
+                Err(error) if import_conflict_error(&error) => sleep_conflicts += 1,
+                Err(error) => return Err(error),
+            }
+        }
+
+        let mut workouts_inserted = 0usize;
+        let mut workouts_unchanged = 0usize;
+        let mut workouts_conflicts = 0usize;
+        for entry in &args.workouts {
+            let mut provenance = serde_json::Map::new();
+            provenance.insert(
+                "import_origin".to_string(),
+                json!(IMPORT_HISTORY_ORIGIN),
+            );
+            if let Some(value) = entry.imported_strain {
+                provenance.insert("imported_strain".to_string(), json!(value));
+            }
+            if let Some(value) = entry.kcal {
+                provenance.insert("imported_kcal".to_string(), json!(value));
+            }
+            if let Some(value) = entry.hr_max {
+                provenance.insert("imported_hr_max_bpm".to_string(), json!(value));
+            }
+            if let Some(value) = entry.hr_avg {
+                provenance.insert("imported_hr_avg_bpm".to_string(), json!(value));
+            }
+            if let Some(zones) = &entry.hr_zone_seconds {
+                provenance.insert(
+                    "imported_hr_zone_seconds".to_string(),
+                    serde_json::Value::Object(zones.clone()),
+                );
+            }
+            let provenance_json = serde_json::Value::Object(provenance).to_string();
+            match store.insert_activity_session(ActivitySessionInput {
+                session_id: &entry.import_key,
+                source: IMPORT_HISTORY_SOURCE,
+                start_time_unix_ms: entry.start_time_unix_ms,
+                end_time_unix_ms: entry.end_time_unix_ms,
+                activity_type: &entry.activity_type,
+                external_activity_type_code: None,
+                external_activity_type_name: entry.external_activity_type_name.as_deref(),
+                custom_label: entry.custom_label.as_deref(),
+                confidence: entry.confidence,
+                detection_method: "imported",
+                sync_status: "synced",
+                provenance_json: &provenance_json,
+            }) {
+                Ok(true) => workouts_inserted += 1,
+                Ok(false) => workouts_unchanged += 1,
+                Err(error) if import_conflict_error(&error) => workouts_conflicts += 1,
+                Err(error) => return Err(error),
+            }
+        }
+
+        Ok(json!({
+            "recovery_written": recovery_written,
+            "recovery_unchanged": recovery_unchanged,
+            "activity_written": activity_written,
+            "activity_unchanged": activity_unchanged,
+            "sleep_inserted": sleep_inserted,
+            "sleep_unchanged": sleep_unchanged,
+            "sleep_conflicts": sleep_conflicts,
+            "workouts_inserted": workouts_inserted,
+            "workouts_unchanged": workouts_unchanged,
+            "workouts_conflicts": workouts_conflicts,
+        }))
+    })?;
+
+    let mut response = result;
+    if let Some(object) = response.as_object_mut() {
+        object.insert(
+            "schema".to_string(),
+            json!("murmur.import-result.v1"),
+        );
+        object.insert("generated_by".to_string(), json!("goose-bridge"));
+        object.insert(
+            "recovery_count".to_string(),
+            json!(args.recovery.len()),
+        );
+        object.insert(
+            "activity_count".to_string(),
+            json!(args.activity.len()),
+        );
+        object.insert("sleep_count".to_string(), json!(args.sleep.len()));
+        object.insert(
+            "workouts_count".to_string(),
+            json!(args.workouts.len()),
+        );
+    }
+    Ok(response)
 }
 
 fn sleep_correction_label_bridge(args: SleepCorrectionLabelArgs) -> GooseResult<serde_json::Value> {

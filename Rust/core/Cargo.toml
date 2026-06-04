@@ -20,6 +20,10 @@ name = "goose-parser-fixture-runner"
 path = "src/bin/goose-parser-fixture-runner.rs"
 
 [[bin]]
+name = "goose-whoop-import"
+path = "src/bin/goose-whoop-import.rs"
+
+[[bin]]
 name = "goose-capture-import"
 path = "src/bin/goose-capture-import.rs"
 

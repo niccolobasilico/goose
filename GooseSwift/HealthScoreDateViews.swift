@@ -104,8 +104,21 @@ struct ScoreDatePickerSheet: View {
   private var monthStarts: [Date] {
     let current = calendar.dateInterval(of: .month, for: selectedDate)?.start
       ?? calendar.startOfDay(for: selectedDate)
-    let previous = calendar.date(byAdding: .month, value: -1, to: current) ?? current
-    return [current, previous]
+    // Mesi navigabili fino all'inizio dello storico importato (2023-07).
+    let floor = HealthDataStore.importedHistoryFloor
+    var months: [Date] = []
+    var cursor = current
+    while cursor >= floor, months.count < 48 {
+      months.append(cursor)
+      guard let previous = calendar.date(byAdding: .month, value: -1, to: cursor) else {
+        break
+      }
+      cursor = previous
+    }
+    if months.isEmpty {
+      months.append(current)
+    }
+    return months
   }
 }
 

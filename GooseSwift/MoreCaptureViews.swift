@@ -215,6 +215,9 @@ struct MoreCaptureView: View {
       }
 
       Section("Imports And Matching") {
+        MoreActionRow(title: "Importa storico", detail: store.historyImportStatus, systemImage: "tray.and.arrow.down", status: store.historyImportStatusKind, disabled: store.historyImportInProgress) {
+          store.runHistoryImport()
+        }
         MoreActionRow(title: "Import Capture File", detail: store.captureImportStatus, systemImage: "doc.badge.plus", status: .unavailable, disabled: true) {
           store.markFileActionUnavailable(.captureFile)
         }

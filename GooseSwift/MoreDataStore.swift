@@ -24,6 +24,9 @@ final class MoreDataStore: ObservableObject {
   @Published var emulatorLogStatus = "Waiting for an emulator log"
   @Published var localFrameMatchStatus = "Waiting for imported frames"
   @Published var validatedCommandStatus = "Waiting for command validation samples"
+  @Published var historyImportStatus = "Metti murmur-history.json in Documents/GooseSwift/Import"
+  @Published var historyImportStatusKind: MoreStatusKind = .pending
+  @Published var historyImportInProgress = false
   @Published var recentCaptureSessions: [String] = []
 
   @Published var healthBackfillStart: String

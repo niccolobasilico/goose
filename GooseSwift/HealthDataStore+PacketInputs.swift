@@ -208,15 +208,18 @@ extension HealthDataStore {
 
   nonisolated static func dailyActivityMetricListArgs(databasePath: String) -> [String: Any] {
     let window = currentDailyMetricWindow()
-    var calendar = Calendar.autoupdatingCurrent
-    calendar.locale = Locale(identifier: "en_US_POSIX")
-    let historyStart = calendar.date(byAdding: .day, value: -29, to: window.start)
-      ?? window.start.addingTimeInterval(-29 * 86_400)
+    // Finestra ampia per coprire anche lo storico importato (export 2023+).
+    let historyStart = min(Self.importedHistoryFloor, window.start.addingTimeInterval(-29 * 86_400))
     return [
       "database_path": databasePath,
       "start_time_unix_ms": Int64((historyStart.timeIntervalSince1970 * 1000).rounded()),
       "end_time_unix_ms": window.endTimeUnixMS,
     ]
+  }
+
+  // 2023-07-01 UTC: prima data possibile dello storico importato via murmur-history.
+  nonisolated static var importedHistoryFloor: Date {
+    Date(timeIntervalSince1970: 1_688_169_600)
   }
 
   nonisolated static func hourlyActivityMetricListArgs(databasePath: String) -> [String: Any] {
@@ -231,10 +234,8 @@ extension HealthDataStore {
 
   nonisolated static func dailyRecoveryMetricListArgs(databasePath: String) -> [String: Any] {
     let window = currentDailyMetricWindow()
-    var calendar = Calendar.autoupdatingCurrent
-    calendar.locale = Locale(identifier: "en_US_POSIX")
-    let historyStart = calendar.date(byAdding: .day, value: -29, to: window.start)
-      ?? window.start.addingTimeInterval(-29 * 86_400)
+    // Finestra ampia per coprire anche lo storico importato (export 2023+).
+    let historyStart = min(Self.importedHistoryFloor, window.start.addingTimeInterval(-29 * 86_400))
     return [
       "database_path": databasePath,
       "start_time_unix_ms": Int64((historyStart.timeIntervalSince1970 * 1000).rounded()),
