@@ -61,8 +61,10 @@ extension GooseBLEClient {
     guard notificationCharacteristicIDs.contains(characteristic.uuid) else {
       return
     }
-    for frame in Self.v5Frames(in: value) {
-      guard let payload = Self.v5Payload(in: frame),
+    let isGen4 = characteristic.uuid.uuidString.lowercased().hasPrefix("610800")
+    let frames = isGen4 ? Self.gen4Frames(in: value) : Self.v5Frames(in: value)
+    for frame in frames {
+      guard let payload = isGen4 ? Self.gen4Payload(in: frame) : Self.v5Payload(in: frame),
             let packetType = payload.first else {
         continue
       }

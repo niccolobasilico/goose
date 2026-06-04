@@ -677,6 +677,26 @@ final class GooseBLEClient: NSObject, ObservableObject {
         return [2, 0xff]
       }
     }
+
+    // Formato Harvard/Gen4 validato da openwhoop sulla band reale:
+    // SET = [revision 0x01][unix u32-LE][4 byte padding]; GET/RUN = [0x00].
+    var gen4Payload: [UInt8] {
+      switch self {
+      case .get:
+        return [0x00]
+      case .set(_, let date, _):
+        var bytes: [UInt8] = [0x01]
+        let timestamp = GooseBLEClient.alarmTimestampParts(for: date)
+        GooseBLEClient.appendUInt32LE(timestamp.seconds, to: &bytes)
+        bytes.append(contentsOf: [0, 0, 0, 0])
+        return bytes
+      case .run:
+        return [0x00]
+      case .disableAll:
+        // Non validato su Gen4 (openwhoop non lo espone): best effort.
+        return [0x00]
+      }
+    }
   }
 
   struct PendingAlarmCommand {
@@ -858,7 +878,7 @@ final class GooseBLEClient: NSObject, ObservableObject {
   }
 
   var canWriteAlarm: Bool {
-    canSendHello && !isHistoricalSyncing && supportsV5AlarmCommands && pendingAlarmCommand == nil
+    canSendHello && !isHistoricalSyncing && supportsAlarmCommands && pendingAlarmCommand == nil
   }
 
   var canSyncClock: Bool {
@@ -895,8 +915,8 @@ final class GooseBLEClient: NSObject, ObservableObject {
     if pendingAlarmCommand != nil {
       return "Alarm command in flight"
     }
-    if !supportsV5AlarmCommands {
-      return "Alarm writes need fd4b0002 V5 command framing; active \(commandCharacteristic.uuid.uuidString)"
+    if !supportsAlarmCommands {
+      return "Alarm writes need a V5 (fd4b) or Gen4 (6108) command characteristic; active \(commandCharacteristic.uuid.uuidString)"
     }
     if !canSendHello {
       return "WHOOP connection is not ready"

@@ -160,6 +160,10 @@ extension GooseBLEClient {
     commandCharacteristic.map(isV5CommandCharacteristic) == true
   }
 
+  var supportsAlarmCommands: Bool {
+    supportsV5AlarmCommands || supportsGen4HistoricalSync
+  }
+
   var supportsV5ClockCommands: Bool {
     commandCharacteristic.map(isV5CommandCharacteristic) == true
   }
@@ -311,8 +315,8 @@ extension GooseBLEClient {
       record(level: .warn, source: "ble.alarm", title: "alarm.write.blocked", body: alarmCommandStatus)
       return
     }
-    guard supportsV5AlarmCommands else {
-      alarmCommandStatus = "Alarm writes need fd4b0002 V5 command framing"
+    guard supportsAlarmCommands else {
+      alarmCommandStatus = "Alarm writes need a V5 (fd4b) or Gen4 (6108) command characteristic"
       record(level: .warn, source: "ble.alarm", title: "alarm.write.blocked", body: commandCharacteristic.uuid.uuidString)
       return
     }
@@ -322,12 +326,20 @@ extension GooseBLEClient {
       return
     }
 
+    let isGen4 = isGen4CommandCharacteristic(commandCharacteristic)
+    let commandPayload = isGen4 ? kind.gen4Payload : kind.payload
     let sequence = nextAlarmSequence()
-    let frame = Self.buildV5CommandFrame(
-      sequence: sequence,
-      command: kind.commandNumber,
-      data: kind.payload
-    )
+    let frame = isGen4
+      ? Self.buildGen4CommandFrame(
+        sequence: sequence,
+        command: kind.commandNumber,
+        data: commandPayload
+      )
+      : Self.buildV5CommandFrame(
+        sequence: sequence,
+        command: kind.commandNumber,
+        data: commandPayload
+      )
     pendingAlarmCommand = PendingAlarmCommand(kind: kind, sequence: sequence)
     scheduleAlarmCommandTimeout(kind: kind, sequence: sequence)
     lastAlarmCommandFrameHex = frame.hexString
@@ -342,7 +354,7 @@ extension GooseBLEClient {
       commandName: kind.name,
       commandNumber: kind.commandNumber,
       sequence: sequence,
-      payload: Data(kind.payload),
+      payload: Data(commandPayload),
       frame: frame,
       peripheral: activePeripheral,
       characteristic: commandCharacteristic,
@@ -351,7 +363,7 @@ extension GooseBLEClient {
     record(
       source: "ble.alarm",
       title: "alarm.command.sent",
-      body: "\(kind.name) seq=\(sequence) command=\(kind.commandNumber) payload=\(Data(kind.payload).hexString) writeType=\(writeTypeName(writeType)) frame=\(frame.hexString)"
+      body: "\(kind.name) seq=\(sequence) command=\(kind.commandNumber) payload=\(Data(commandPayload).hexString) writeType=\(writeTypeName(writeType)) frame=\(frame.hexString)"
     )
   }
 

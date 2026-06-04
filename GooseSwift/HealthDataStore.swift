@@ -43,6 +43,7 @@ final class HealthDataStore: ObservableObject {
   var packetInputRefreshWorkItem: DispatchWorkItem?
   var packetInputRunID: UUID?
   var packetInputIsRunning = false
+  var packetScoreIsRunning = false
   var heartRateTimelineRefreshID: UUID?
   var heartRateSeriesUpdateObserver: NSObjectProtocol?
   var historyImportObserver: NSObjectProtocol?

@@ -5,11 +5,57 @@ import UIKit
 
 extension HealthDataStore {
   func runPacketScores() {
+    // I calcoli punteggio sono pesanti (frames + 522 prior notturne):
+    // sul main thread congelano la UI, vanno in background come gli inputs.
+    guard !packetScoreIsRunning else {
+      return
+    }
+    packetScoreIsRunning = true
+    packetScoreStatus = "Recomputing packet-derived scores..."
     let baseArgs = bridgeBaseArgs(requireTrustedEvidence: false)
+    let recoveryExtraArgs = recoveryScoreBridgeArgs()
+    packetInputQueue.async { [weak self] in
+      let outcome = HealthDataStore.computePacketScores(
+        baseArgs: baseArgs,
+        recoveryExtraArgs: recoveryExtraArgs
+      )
+      DispatchQueue.main.async { [weak self] in
+        guard let self else {
+          return
+        }
+        self.packetScoreIsRunning = false
+        if let reports = outcome.reports {
+          for (key, value) in reports {
+            self.packetScoreReports[key] = value
+          }
+          self.refreshPrimarySleepFromScoreReport()
+          self.packetScoreStatus = "Bridge packet-derived scores recomputed"
+        } else {
+          self.packetScoreStatus = "Bridge score run blocked: \(outcome.error ?? "unknown error")"
+        }
+      }
+    }
+  }
+
+  nonisolated static func computePacketScores(
+    baseArgs: [String: Any],
+    recoveryExtraArgs: [String: Any]
+  ) -> (reports: [String: [String: Any]]?, error: String?) {
+    let bridge = GooseRustBridge()
     do {
-      packetScoreReports["sleep"] = try sleepScoreReport(baseArgs: baseArgs)
-      refreshPrimarySleepFromScoreReport()
-      packetScoreReports["strain"] = try bridge.request(
+      var reports: [String: [String: Any]] = [:]
+      reports["sleep"] = try bridge.request(
+        method: "metrics.sleep_score_from_features",
+        args: baseArgs.merging([
+          "sleep_need_minutes": 480.0,
+          "low_motion_threshold_0_to_1": 0.05,
+          "disturbance_motion_threshold_0_to_1": 0.20,
+          "target_midpoint_minutes_since_midnight": 180.0,
+          "history_import_in_progress": false,
+          "algorithm_id": "goose.sleep.v1",
+        ]) { _, new in new }
+      )
+      reports["strain"] = try bridge.request(
         method: "metrics.strain_score_from_features",
         args: baseArgs.merging([
           "resting_start": "0000",
@@ -17,11 +63,11 @@ extension HealthDataStore {
           "resting_baseline_min_days": 3,
         ]) { _, new in new }
       )
-      packetScoreReports["recovery"] = try bridge.request(
+      reports["recovery"] = try bridge.request(
         method: "metrics.recovery_score_from_features",
-        args: baseArgs.merging(recoveryScoreBridgeArgs()) { _, new in new }
+        args: baseArgs.merging(recoveryExtraArgs) { _, new in new }
       )
-      packetScoreReports["stress"] = try bridge.request(
+      reports["stress"] = try bridge.request(
         method: "metrics.stress_score_from_features",
         args: baseArgs.merging([
           "resting_start": "0000",
@@ -35,9 +81,10 @@ extension HealthDataStore {
           "hrv_baseline_min_days": 3,
         ]) { _, new in new }
       )
-      packetScoreStatus = "Bridge packet-derived scores recomputed"
+      return (reports, nil)
     } catch {
-      packetScoreStatus = "Bridge score run blocked: \(Self.shortError(error))"
+      let text = String(describing: error)
+      return (nil, text.count > 96 ? "\(text.prefix(96))..." : text)
     }
   }
 
