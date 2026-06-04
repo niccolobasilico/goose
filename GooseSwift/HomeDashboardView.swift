@@ -94,6 +94,9 @@ struct HomeDashboardView: View {
     }
     .task {
       healthStore.loadBridgeCatalogsIfNeeded()
+      // La Home e' la prima schermata: i dati salute devono caricarsi da qui,
+      // non solo aprendo il tab Salute.
+      healthStore.refreshPacketInputsIfNeeded()
       model.refreshActivityTimeline(for: selectedDate)
     }
     .onChange(of: selectedDate) { _, newValue in
