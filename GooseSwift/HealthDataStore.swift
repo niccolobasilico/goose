@@ -31,6 +31,7 @@ final class HealthDataStore: ObservableObject {
       dailyRecoveryMetricsCache = nil
       dailyActivityMetricsCache = nil
       importedSleepSessionsCache = nil
+      recoveryScoreByDateKeyCache = nil
     }
   }
   // Cache dei filtri display-safe: il parsing JSON di ~500 righe a ogni accesso
@@ -38,6 +39,7 @@ final class HealthDataStore: ObservableObject {
   var dailyRecoveryMetricsCache: [[String: Any]]?
   var dailyActivityMetricsCache: [[String: Any]]?
   var importedSleepSessionsCache: [[String: Any]]?
+  var recoveryScoreByDateKeyCache: [String: Double]?
   var packetScoreReports: [String: [String: Any]] = [:]
   var referenceComparisonReports: [String: [String: Any]] = [:]
   var packetInputRefreshWorkItem: DispatchWorkItem?
@@ -82,7 +84,7 @@ final class HealthDataStore: ObservableObject {
       queue: .main
     ) { [weak self] _ in
       Task { @MainActor in
-        self?.runPacketInputs()
+        self?.refreshAllHealthData()
       }
     }
   }
@@ -142,7 +144,21 @@ final class HealthDataStore: ObservableObject {
     guard packetInputReports.isEmpty, packetInputStatus == "No run" else {
       return
     }
-    runPacketInputs()
+    // Al primo caricamento calcola anche i punteggi: senza, le schermate
+    // restano vuote finche' non si preme il bottone manuale nella dashboard.
+    runPacketInputs { [weak self] in
+      guard let self, self.packetScoreReports.isEmpty else {
+        return
+      }
+      self.runPacketScores()
+    }
+  }
+
+  // Ricarica completa (inputs + punteggi): usata dopo sync band e import storico.
+  func refreshAllHealthData() {
+    runPacketInputs { [weak self] in
+      self?.runPacketScores()
+    }
   }
 
   func refreshHeartRateTimeline(for date: Date = Date()) {

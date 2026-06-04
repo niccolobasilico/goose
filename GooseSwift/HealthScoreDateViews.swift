@@ -39,52 +39,66 @@ struct ScoreDatePickerSheet: View {
   let routes: [HealthRoute]
   let snapshots: [HealthMetricSnapshot]
   @Binding var selectedDate: Date
+  var recoveryByDateKey: [String: Double] = [:]
 
   @Environment(\.dismiss) private var dismiss
+  @State private var displayedMonth = Date()
   private let calendar = Calendar.current
+  private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+
+  private static let dateKeyFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+  }()
 
   var body: some View {
     VStack(spacing: 0) {
       sheetHeader
         .padding(.horizontal, 18)
         .padding(.top, 18)
-        .padding(.bottom, 10)
+        .padding(.bottom, 8)
 
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 30) {
-          ForEach(monthStarts, id: \.self) { monthStart in
-            ScoreDateMonthSection(
-              monthStart: monthStart,
-              routes: routes,
-              snapshots: snapshots,
-              selectedDate: $selectedDate,
-              calendar: calendar,
-              selectDate: { date in
-                selectedDate = date
-                dismiss()
-              }
-            )
-          }
-        }
+      monthNavigator
         .padding(.horizontal, 18)
-        .padding(.bottom, 28)
+        .padding(.bottom, 12)
+
+      weekdayHeader
+        .padding(.horizontal, 18)
+
+      LazyVGrid(columns: columns, alignment: .center, spacing: 10) {
+        ForEach(0..<leadingBlankCount, id: \.self) { index in
+          Color.clear
+            .frame(height: 40)
+            .accessibilityHidden(true)
+            .id("blank-\(index)")
+        }
+        ForEach(daysInDisplayedMonth, id: \.self) { date in
+          dayCell(for: date)
+        }
       }
+      .padding(.horizontal, 18)
+      .padding(.top, 8)
+
+      legend
+        .padding(.top, 18)
+
+      Spacer(minLength: 0)
     }
     .goosePlainBackground()
-    .presentationDetents([.large])
+    .presentationDetents([.medium, .large])
     .presentationDragIndicator(.hidden)
+    .onAppear {
+      displayedMonth = monthStart(of: selectedDate)
+    }
   }
 
   private var sheetHeader: some View {
     ZStack {
-      VStack(spacing: 2) {
-        Text(title)
-          .font(.headline.weight(.semibold))
-          .fontDesign(.rounded)
-        Text(selectedDate.formatted(.dateTime.month(.wide).year()))
-          .font(.subheadline.weight(.medium))
-          .foregroundStyle(.secondary)
-      }
+      Text(title)
+        .font(.headline.weight(.semibold))
+        .fontDesign(.rounded)
       HStack {
         Spacer()
         Button {
@@ -101,24 +115,147 @@ struct ScoreDatePickerSheet: View {
     }
   }
 
-  private var monthStarts: [Date] {
-    let current = calendar.dateInterval(of: .month, for: selectedDate)?.start
-      ?? calendar.startOfDay(for: selectedDate)
-    // Mesi navigabili fino all'inizio dello storico importato (2023-07).
-    let floor = HealthDataStore.importedHistoryFloor
-    var months: [Date] = []
-    var cursor = current
-    while cursor >= floor, months.count < 48 {
-      months.append(cursor)
-      guard let previous = calendar.date(byAdding: .month, value: -1, to: cursor) else {
-        break
+  private var monthNavigator: some View {
+    HStack {
+      Button {
+        displayedMonth = calendar.date(byAdding: .month, value: -1, to: displayedMonth) ?? displayedMonth
+      } label: {
+        Image(systemName: "chevron.left")
+          .font(.headline.weight(.semibold))
+          .frame(width: 38, height: 38)
+          .background(.quaternary, in: Circle())
       }
-      cursor = previous
+      .buttonStyle(.plain)
+      .disabled(!canGoToPreviousMonth)
+      .opacity(canGoToPreviousMonth ? 1 : 0.3)
+
+      Spacer()
+
+      Text(displayedMonth.formatted(.dateTime.month(.wide).year()))
+        .font(.title3.bold())
+        .fontDesign(.rounded)
+
+      Spacer()
+
+      Button {
+        displayedMonth = calendar.date(byAdding: .month, value: 1, to: displayedMonth) ?? displayedMonth
+      } label: {
+        Image(systemName: "chevron.right")
+          .font(.headline.weight(.semibold))
+          .frame(width: 38, height: 38)
+          .background(.quaternary, in: Circle())
+      }
+      .buttonStyle(.plain)
+      .disabled(!canGoToNextMonth)
+      .opacity(canGoToNextMonth ? 1 : 0.3)
     }
-    if months.isEmpty {
-      months.append(current)
+  }
+
+  private var weekdayHeader: some View {
+    let symbols = calendar.veryShortStandaloneWeekdaySymbols
+    let ordered = Array(symbols[(calendar.firstWeekday - 1)...] + symbols[..<(calendar.firstWeekday - 1)])
+    return LazyVGrid(columns: columns, alignment: .center, spacing: 0) {
+      ForEach(Array(ordered.enumerated()), id: \.offset) { _, symbol in
+        Text(symbol)
+          .font(.caption2.weight(.semibold))
+          .foregroundStyle(.secondary)
+      }
     }
-    return months
+  }
+
+  @ViewBuilder
+  private func dayCell(for date: Date) -> some View {
+    let today = calendar.startOfDay(for: Date())
+    let day = calendar.startOfDay(for: date)
+    let isFuture = day > today
+    let isSelected = calendar.isDate(day, inSameDayAs: selectedDate)
+    let isToday = calendar.isDate(day, inSameDayAs: today)
+    let score = recoveryByDateKey[Self.dateKeyFormatter.string(from: day)]
+
+    Button {
+      selectedDate = day
+      dismiss()
+    } label: {
+      Text("\(calendar.component(.day, from: day))")
+        .font(.callout.weight(.semibold))
+        .fontDesign(.rounded)
+        .frame(width: 38, height: 38)
+        .background(
+          Circle().fill(scoreColor(score).opacity(score == nil ? 0 : 0.30))
+        )
+        .overlay(
+          Circle().strokeBorder(
+            isSelected ? Color.pink : (isToday ? Color.secondary.opacity(0.7) : Color.clear),
+            lineWidth: 2
+          )
+        )
+        .opacity(isFuture ? 0.25 : 1)
+    }
+    .buttonStyle(.plain)
+    .disabled(isFuture)
+    .accessibilityLabel(date.formatted(.dateTime.month().day()))
+  }
+
+  private var legend: some View {
+    HStack(spacing: 14) {
+      legendDot(color: .green, label: "67-100")
+      legendDot(color: .yellow, label: "34-66")
+      legendDot(color: .red, label: "1-33")
+    }
+    .font(.caption2)
+    .foregroundStyle(.secondary)
+  }
+
+  private func legendDot(color: Color, label: String) -> some View {
+    HStack(spacing: 5) {
+      Circle().fill(color.opacity(0.5)).frame(width: 9, height: 9)
+      Text(label)
+    }
+  }
+
+  private func scoreColor(_ score: Double?) -> Color {
+    guard let score else {
+      return .clear
+    }
+    if score >= 67 {
+      return .green
+    }
+    if score >= 34 {
+      return .yellow
+    }
+    return .red
+  }
+
+  private func monthStart(of date: Date) -> Date {
+    calendar.dateInterval(of: .month, for: date)?.start ?? calendar.startOfDay(for: date)
+  }
+
+  private var canGoToPreviousMonth: Bool {
+    guard let previous = calendar.date(byAdding: .month, value: -1, to: displayedMonth) else {
+      return false
+    }
+    return previous >= monthStart(of: HealthDataStore.importedHistoryFloor)
+  }
+
+  private var canGoToNextMonth: Bool {
+    guard let next = calendar.date(byAdding: .month, value: 1, to: displayedMonth) else {
+      return false
+    }
+    return next <= monthStart(of: Date())
+  }
+
+  private var leadingBlankCount: Int {
+    let firstWeekday = calendar.component(.weekday, from: displayedMonth)
+    return (firstWeekday - calendar.firstWeekday + 7) % 7
+  }
+
+  private var daysInDisplayedMonth: [Date] {
+    guard let range = calendar.range(of: .day, in: .month, for: displayedMonth) else {
+      return []
+    }
+    return range.compactMap { day in
+      calendar.date(byAdding: .day, value: day - 1, to: displayedMonth)
+    }
   }
 }
 

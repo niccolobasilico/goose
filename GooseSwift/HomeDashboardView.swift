@@ -104,7 +104,8 @@ struct HomeDashboardView: View {
         title: "Daily Scores",
         routes: [.sleep, .recovery, .strain],
         snapshots: scorePickerSnapshots,
-        selectedDate: $selectedDate
+        selectedDate: $selectedDate,
+        recoveryByDateKey: healthStore.recoveryScoreByDateKey()
       )
     }
     .sheet(isPresented: $showingCardioLoadSheet) {

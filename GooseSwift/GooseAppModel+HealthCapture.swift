@@ -308,6 +308,14 @@ extension GooseAppModel {
 
   func handleHistoricalSyncProgress(_ progress: GooseHistoricalSyncProgress) {
     handleOvernightHistoricalSyncProgress(progress)
+    if progress.isTerminal, !progress.failed {
+      // Il sync della band ha scritto nuovi dati nel DB: le schermate salute
+      // devono ricaricare inputs e punteggi senza bottoni manuali.
+      NotificationCenter.default.post(
+        name: HealthDataStore.historyImportDidCompleteNotification,
+        object: nil
+      )
+    }
     guard respiratoryPacketWatchActive else {
       return
     }

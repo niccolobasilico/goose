@@ -112,7 +112,8 @@ struct HealthMetricFamilyView: View {
         title: route.title,
         routes: [route],
         snapshots: [store.snapshot(for: route)],
-        selectedDate: selectedDateBinding
+        selectedDate: selectedDateBinding,
+        recoveryByDateKey: store.recoveryScoreByDateKey()
       )
     }
     .alert("Add Sleep Unavailable", isPresented: $showAddSleepUnavailable) {
@@ -559,7 +560,8 @@ struct StrainV2OverviewPage: View {
         title: "Strain",
         routes: [.strain],
         snapshots: [store.snapshot(for: .strain)],
-        selectedDate: $selectedDate
+        selectedDate: $selectedDate,
+        recoveryByDateKey: store.recoveryScoreByDateKey()
       )
     }
     .sheet(isPresented: $showingInsightsSheet) {

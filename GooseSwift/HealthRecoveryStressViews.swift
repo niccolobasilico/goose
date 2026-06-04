@@ -147,7 +147,8 @@ struct RecoveryV2OverviewPage: View {
         title: "Recovery",
         routes: [.recovery],
         snapshots: [store.snapshot(for: .recovery)],
-        selectedDate: $selectedDate
+        selectedDate: $selectedDate,
+        recoveryByDateKey: store.recoveryScoreByDateKey()
       )
     }
     .sheet(item: $selectedTrend) { snapshot in

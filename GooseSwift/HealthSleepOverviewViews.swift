@@ -158,7 +158,8 @@ struct SleepV2OverviewPage: View {
         title: "Sleep",
         routes: [.sleep],
         snapshots: [store.snapshot(for: .sleep)],
-        selectedDate: $selectedDate
+        selectedDate: $selectedDate,
+        recoveryByDateKey: store.recoveryScoreByDateKey()
       )
     }
 	    .sheet(isPresented: $showingAlarmSheet) {

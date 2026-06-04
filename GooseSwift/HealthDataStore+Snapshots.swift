@@ -550,6 +550,24 @@ extension HealthDataStore {
     return String(format: "%d:%02d", total / 60, total % 60)
   }
 
+  // Mappa date_key -> recovery WHOOP importato, per colorare il calendario.
+  func recoveryScoreByDateKey() -> [String: Double] {
+    if let cached = recoveryScoreByDateKeyCache {
+      return cached
+    }
+    var map: [String: Double] = [:]
+    for metric in dailyRecoveryMetrics() {
+      guard let dateKey = metric["date_key"] as? String,
+            let inputs = Self.jsonObject(fromJSONString: metric["inputs_json"]),
+            let score = Self.doubleValue(inputs["imported_score_0_to_100"]) else {
+        continue
+      }
+      map[dateKey] = score
+    }
+    recoveryScoreByDateKeyCache = map
+    return map
+  }
+
   func strainTargetDisplayText() -> String {
     "--"
   }
