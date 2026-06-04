@@ -339,10 +339,15 @@ extension GooseAppModel {
     packetImportRevisionWorkItem?.cancel()
     packetImportRevisionWorkItem = nil
     lastPacketImportRevisionPublishedAt = now
-    if let pendingPacketImportStatus {
-      packetImportStatus = pendingPacketImportStatus
-      self.pendingPacketImportStatus = nil
+    guard let pendingPacketImportStatus else {
+      // Nessun frame nuovo dall'ultimo publish: incrementare la revision
+      // forzerebbe un re-render dell'intera gerarchia per nulla.
+      return
     }
+    if packetImportStatus != pendingPacketImportStatus {
+      packetImportStatus = pendingPacketImportStatus
+    }
+    self.pendingPacketImportStatus = nil
     packetImportRevision += 1
   }
 

@@ -145,6 +145,7 @@ final class GooseAppModel: ObservableObject {
   var pendingHealthPacketCaptureLastPacketSummary: String?
   var pendingPacketImportStatus: String?
   var lastPacketImportRevisionPublishedAt = Date.distantPast
+  var lastPostSyncHealthRefreshAt = Date.distantPast
   var lastHealthPacketCaptureUIUpdatedAt = Date.distantPast
   var lastHealthPacketCaptureSummaryLoggedAt = Date.distantPast
   var lastParsedFrameSummaryUpdatedAt = Date.distantPast

@@ -16,11 +16,16 @@ extension GooseAppModel {
       return
     }
 
-    healthPacketCaptureFamilyRows = snapshot.rows
+    // Assegnare l'array solo se cambiato: la riscrittura identica ogni secondo
+    // forza re-render inutili di tutta la gerarchia che osserva il model.
+    if healthPacketCaptureFamilyRows != snapshot.rows {
+      healthPacketCaptureFamilyRows = snapshot.rows
+    }
     healthPacketCaptureFamilyRowsByID = Dictionary(
       uniqueKeysWithValues: snapshot.rows.map { ($0.id, $0) }
     )
-    if let lastPacketSummary = snapshot.lastPacketSummary {
+    if let lastPacketSummary = snapshot.lastPacketSummary,
+       lastPacketSummary != healthPacketCaptureLastPacketSummary {
       healthPacketCaptureLastPacketSummary = lastPacketSummary
     }
     for family in snapshot.discoveredFamilies {

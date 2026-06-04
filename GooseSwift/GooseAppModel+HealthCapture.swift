@@ -308,13 +308,18 @@ extension GooseAppModel {
 
   func handleHistoricalSyncProgress(_ progress: GooseHistoricalSyncProgress) {
     handleOvernightHistoricalSyncProgress(progress)
-    if progress.isTerminal, !progress.failed {
-      // Il sync della band ha scritto nuovi dati nel DB: le schermate salute
-      // devono ricaricare inputs e punteggi senza bottoni manuali.
-      NotificationCenter.default.post(
-        name: HealthDataStore.historyImportDidCompleteNotification,
-        object: nil
-      )
+    if progress.isTerminal, !progress.failed, !progress.rangeOnly, progress.packetCount > 0 {
+      // Sync vero con pacchetti nuovi: le schermate salute devono ricaricare.
+      // I range-poll (overnight guard) e i sync a vuoto NON devono triggerare
+      // il refresh: invalidano le cache e saturano il main thread (thrash loop).
+      let now = Date()
+      if now.timeIntervalSince(lastPostSyncHealthRefreshAt) >= 60 {
+        lastPostSyncHealthRefreshAt = now
+        NotificationCenter.default.post(
+          name: HealthDataStore.historyImportDidCompleteNotification,
+          object: nil
+        )
+      }
     }
     guard respiratoryPacketWatchActive else {
       return

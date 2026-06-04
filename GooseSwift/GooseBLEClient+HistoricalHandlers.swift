@@ -627,7 +627,7 @@ extension GooseBLEClient {
       ? "No missed packets found"
       : "\(historicalPacketsReceivedThisSync) historical \(historicalPacketsReceivedThisSync == 1 ? "packet" : "packets") captured"
     publishSyncToast(phase: .synced, detail: detail, clearAfter: 2.2)
-    notifyHistoricalSyncProgress(status: "synced", detail: detail, terminal: true, failed: false)
+    notifyHistoricalSyncProgress(status: "synced", detail: detail, terminal: true, failed: false, rangeOnly: rangeOnly)
     record(source: "ble.sync", title: "historical_sync.completed", body: "reason=\(reason) \(detail)")
   }
 
@@ -659,7 +659,13 @@ extension GooseBLEClient {
     record(level: .error, source: "ble.sync", title: "historical_sync.failed", body: message)
   }
 
-  func notifyHistoricalSyncProgress(status: String, detail: String, terminal: Bool, failed: Bool) {
+  func notifyHistoricalSyncProgress(
+    status: String,
+    detail: String,
+    terminal: Bool,
+    failed: Bool,
+    rangeOnly: Bool? = nil
+  ) {
     let capturedAt = Date()
     let highVolumePacketProgress = !terminal
       && !failed
@@ -698,6 +704,7 @@ extension GooseBLEClient {
         packetCount: historicalPacketsReceivedThisSync,
         isTerminal: terminal,
         failed: failed,
+        rangeOnly: rangeOnly ?? historicalRangePollOnly,
         capturedAt: capturedAt
       )
     )

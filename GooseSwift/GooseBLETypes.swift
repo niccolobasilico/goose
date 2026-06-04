@@ -74,6 +74,7 @@ struct GooseHistoricalSyncProgress {
   let packetCount: Int
   let isTerminal: Bool
   let failed: Bool
+  let rangeOnly: Bool
   let capturedAt: Date
 }
 
