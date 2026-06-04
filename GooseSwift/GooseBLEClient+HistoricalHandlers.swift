@@ -8,13 +8,15 @@ extension GooseBLEClient {
     guard isHistoricalSyncing else {
       return
     }
-    for frame in Self.v5Frames(in: value) {
-      handleHistoricalSyncFrame(frame, characteristic: characteristic)
+    let isGen4 = characteristic.uuid.uuidString.lowercased().hasPrefix("610800")
+    let frames = isGen4 ? Self.gen4Frames(in: value) : Self.v5Frames(in: value)
+    for frame in frames {
+      handleHistoricalSyncFrame(frame, characteristic: characteristic, isGen4: isGen4)
     }
   }
 
-  func handleHistoricalSyncFrame(_ frame: Data, characteristic: CBCharacteristic) {
-    guard let payload = Self.v5Payload(in: frame),
+  func handleHistoricalSyncFrame(_ frame: Data, characteristic: CBCharacteristic, isGen4: Bool = false) {
+    guard let payload = isGen4 ? Self.gen4Payload(in: frame) : Self.v5Payload(in: frame),
           let packetType = payload.first else {
       return
     }

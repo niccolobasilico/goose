@@ -929,6 +929,81 @@ extension GooseBLEClient {
     return Data(frame)
   }
 
+  static func gen4Frames(in data: Data) -> [Data] {
+    var bytes = Array(data)
+    var frames: [Data] = []
+    while let startIndex = bytes.firstIndex(of: 0xaa) {
+      if startIndex > 0 {
+        bytes.removeFirst(startIndex)
+      }
+      guard bytes.count >= 8 else {
+        break
+      }
+      let declaredLength = Int(UInt16(bytes[1]) | UInt16(bytes[2]) << 8)
+      guard declaredLength >= 4, crc8([bytes[1], bytes[2]]) == bytes[3] else {
+        bytes.removeFirst()
+        continue
+      }
+      let expectedLength = declaredLength + 4
+      guard bytes.count >= expectedLength else {
+        break
+      }
+      frames.append(Data(bytes[0..<expectedLength]))
+      bytes.removeFirst(expectedLength)
+    }
+    return frames
+  }
+
+  static func gen4Payload(in frame: Data) -> [UInt8]? {
+    let bytes = Array(frame)
+    guard bytes.count >= 8 else {
+      return nil
+    }
+    let declaredLength = Int(UInt16(bytes[1]) | UInt16(bytes[2]) << 8)
+    let expectedLength = declaredLength + 4
+    guard bytes.count == expectedLength, declaredLength >= 4 else {
+      return nil
+    }
+    return Array(bytes[4..<(bytes.count - 4)])
+  }
+
+  static func buildGen4CommandFrame(sequence: UInt8, command: UInt8, data: [UInt8]) -> Data {
+    // Gen4 (Harvard) framing mirrors openwhoop: [0xAA][len u16-LE][CRC8(len)][type seq cmd data...][CRC32-LE].
+    var payload = [V5PacketType.command, sequence, command]
+    payload.append(contentsOf: data)
+
+    let payloadCRC = crc32(payload)
+    let declaredLength = UInt16(payload.count + 4)
+    let lengthBytes: [UInt8] = [
+      UInt8(declaredLength & 0xff),
+      UInt8((declaredLength >> 8) & 0xff),
+    ]
+    var frame: [UInt8] = [0xaa]
+    frame.append(contentsOf: lengthBytes)
+    frame.append(crc8(lengthBytes))
+    frame.append(contentsOf: payload)
+    frame.append(UInt8(payloadCRC & 0xff))
+    frame.append(UInt8((payloadCRC >> 8) & 0xff))
+    frame.append(UInt8((payloadCRC >> 16) & 0xff))
+    frame.append(UInt8((payloadCRC >> 24) & 0xff))
+    return Data(frame)
+  }
+
+  static func crc8(_ bytes: [UInt8]) -> UInt8 {
+    var crc: UInt8 = 0
+    for byte in bytes {
+      crc ^= byte
+      for _ in 0..<8 {
+        if crc & 0x80 != 0 {
+          crc = (crc << 1) ^ 0x07
+        } else {
+          crc <<= 1
+        }
+      }
+    }
+    return crc
+  }
+
   static func crc16Modbus(_ bytes: [UInt8]) -> UInt16 {
     var crc = UInt16(0xffff)
     for byte in bytes {

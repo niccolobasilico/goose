@@ -23,9 +23,9 @@ extension GooseBLEClient {
       failHistoricalSync("Historical sync can only start from the ready state. Current connection state: \(connectionState).")
       return
     }
-    guard supportsV5HistoricalSync else {
+    guard supportsHistoricalSync else {
       let characteristic = commandCharacteristic?.uuid.uuidString ?? "missing"
-      failHistoricalSync("Historical sync currently supports the Murmur V5 fd4b command characteristic. Active command characteristic: \(characteristic).")
+      failHistoricalSync("Historical sync supports the V5 fd4b and Gen4 6108 command characteristics. Active command characteristic: \(characteristic).")
       return
     }
 
@@ -84,15 +84,27 @@ extension GooseBLEClient {
       return
     }
 
-    let commandPayload = kind == .historicalDataResult
+    let isGen4 = isGen4CommandCharacteristic(commandCharacteristic)
+    var commandPayload = kind == .historicalDataResult
       ? pendingHistoryEndAckPayload ?? kind.payload
       : kind.payload
+    if isGen4, commandPayload.isEmpty {
+      // Gen4 (Harvard) GET_DATA_RANGE and SEND_HISTORICAL_DATA expect a single status byte
+      // (openwhoop history_start()/get_data_range() use [0x00]; the V5 variants use an empty payload).
+      commandPayload = [0x00]
+    }
     let sequence = nextHistoricalSequence()
-    let frame = Self.buildV5CommandFrame(
-      sequence: sequence,
-      command: kind.commandNumber,
-      data: commandPayload
-    )
+    let frame = isGen4
+      ? Self.buildGen4CommandFrame(
+        sequence: sequence,
+        command: kind.commandNumber,
+        data: commandPayload
+      )
+      : Self.buildV5CommandFrame(
+        sequence: sequence,
+        command: kind.commandNumber,
+        data: commandPayload
+      )
     if kind == .sendHistoricalData {
       historicalTransferRequestAttemptCount += 1
     }

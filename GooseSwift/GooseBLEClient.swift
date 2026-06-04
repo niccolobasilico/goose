@@ -846,7 +846,7 @@ final class GooseBLEClient: NSObject, ObservableObject {
   }
 
   var canSyncHistorical: Bool {
-    canSendHello && !isHistoricalSyncing && supportsV5HistoricalSync
+    canSendHello && !isHistoricalSyncing && supportsHistoricalSync
   }
 
   var canWriteHighFrequencyHistorySync: Bool {

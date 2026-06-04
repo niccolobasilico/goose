@@ -148,6 +148,14 @@ extension GooseBLEClient {
     commandCharacteristic.map(isV5CommandCharacteristic) == true
   }
 
+  var supportsGen4HistoricalSync: Bool {
+    commandCharacteristic.map(isGen4CommandCharacteristic) == true
+  }
+
+  var supportsHistoricalSync: Bool {
+    supportsV5HistoricalSync || supportsGen4HistoricalSync
+  }
+
   var supportsV5AlarmCommands: Bool {
     commandCharacteristic.map(isV5CommandCharacteristic) == true
   }
@@ -162,6 +170,10 @@ extension GooseBLEClient {
 
   func isV5CommandCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
     characteristic.uuid.uuidString.lowercased().hasPrefix("fd4b0002")
+  }
+
+  func isGen4CommandCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
+    characteristic.uuid.uuidString.lowercased().hasPrefix("61080002")
   }
 
   func shouldUseCommandCharacteristic(_ characteristic: CBCharacteristic) -> Bool {
@@ -924,7 +936,7 @@ extension GooseBLEClient {
           connectionState == "ready",
           activePeripheral != nil,
           commandCharacteristic != nil,
-          supportsV5HistoricalSync,
+          supportsHistoricalSync,
           !isHistoricalSyncing else {
       return
     }
