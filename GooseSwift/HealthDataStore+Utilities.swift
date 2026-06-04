@@ -196,7 +196,7 @@ extension HealthDataStore {
     return array
   }
 
-  static func localHealthMetricRowIsDisplaySafe(_ metric: [String: Any]) -> Bool {
+  nonisolated static func localHealthMetricRowIsDisplaySafe(_ metric: [String: Any]) -> Bool {
     guard let rawSourceKind = metric["source_kind"] as? String,
           MetricSourceKind(rawValue: rawSourceKind) != nil else {
       return false
@@ -204,7 +204,7 @@ extension HealthDataStore {
     return !localHealthMetricValueContainsForbiddenSourceMarker(metric)
   }
 
-  static func localHealthMetricValueContainsForbiddenSourceMarker(_ value: Any?) -> Bool {
+  nonisolated static func localHealthMetricValueContainsForbiddenSourceMarker(_ value: Any?) -> Bool {
     guard let value else {
       return false
     }
@@ -231,7 +231,7 @@ extension HealthDataStore {
     return false
   }
 
-  static func localHealthMetricJSONStringContainsForbiddenSourceMarker(_ text: String) -> Bool {
+  nonisolated static func localHealthMetricJSONStringContainsForbiddenSourceMarker(_ text: String) -> Bool {
     guard let data = text.data(using: .utf8),
           let value = try? JSONSerialization.jsonObject(with: data) else {
       return false
@@ -239,7 +239,7 @@ extension HealthDataStore {
     return localHealthMetricValueContainsForbiddenSourceMarker(value)
   }
 
-  static func localHealthMetricTextContainsForbiddenSourceMarker(_ text: String) -> Bool {
+  nonisolated static func localHealthMetricTextContainsForbiddenSourceMarker(_ text: String) -> Bool {
     let normalized = localHealthMetricNormalizedMarker(text)
     guard !normalized.isEmpty else {
       return false
@@ -269,7 +269,7 @@ extension HealthDataStore {
     return normalized == "official_app" || normalized.hasPrefix("official_app_")
   }
 
-  static func localHealthMetricNormalizedMarker(_ text: String) -> String {
+  nonisolated static func localHealthMetricNormalizedMarker(_ text: String) -> String {
     text
       .lowercased()
       .unicodeScalars
@@ -306,7 +306,7 @@ extension HealthDataStore {
     return current as? [String: Any]
   }
 
-  static func array(_ value: Any?) -> [[String: Any]] {
+  nonisolated static func array(_ value: Any?) -> [[String: Any]] {
     value as? [[String: Any]] ?? []
   }
 
