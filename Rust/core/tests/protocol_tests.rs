@@ -2,7 +2,8 @@ use goose_core::protocol::{
     COMMAND_GET_HELLO, DataPacketBodySummary, DeviceType, FrameAccumulator, I16SeriesSummary,
     PACKET_TYPE_COMMAND_RESPONSE, PACKET_TYPE_EVENT, PACKET_TYPE_HISTORICAL_DATA,
     PACKET_TYPE_REALTIME_DATA, PACKET_TYPE_REALTIME_RAW_DATA, ParsedPayload,
-    build_v5_command_frame, build_v5_payload_frame, parse_frame, parse_frame_hex,
+    build_gen4_payload_frame, build_v5_command_frame, build_v5_payload_frame, parse_frame,
+    parse_frame_hex,
 };
 
 const GET_HELLO_FRAME: &str = "aa0108000001e67123019101363e5c8d";
@@ -194,6 +195,9 @@ fn parses_history_packet_stable_header_and_hr_marker() {
                 hr_present: Some(true),
                 marker_offset: Some(14),
                 marker_value: Some(0x4d),
+                rr_intervals_ms: Vec::new(),
+                rr_slot_count: None,
+                accel_milli_g: None,
             }),
             warnings: Vec::new(),
         })
@@ -223,6 +227,62 @@ fn normal_history_zero_hr_marker_is_not_treated_as_hr_present() {
                     hr_present: Some(false),
                     marker_offset: Some(17),
                     marker_value: Some(0),
+                    rr_intervals_ms: Vec::new(),
+                    rr_slot_count: Some(0),
+                    accel_milli_g: None,
+                })
+            );
+        }
+        other => panic!("expected data packet, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_gen4_k12_history_body_with_rr_and_gravity() {
+    // Harvard/Gen4 K=12 normal-history body, per the verified openwhoop layout:
+    // data[0:4] sequence, data[4:8] unix seconds, data[14] bpm, data[15] rr count,
+    // data[16:24] four u16 LE RR slots (0 = empty), data[33:45] gravity 3 x f32 LE.
+    let mut payload = vec![0u8; 3 + 77];
+    payload[0] = PACKET_TYPE_HISTORICAL_DATA;
+    payload[1] = 12;
+    payload[2] = 1;
+    payload[3..7].copy_from_slice(&0x01020304u32.to_le_bytes()); // sequence counter
+    payload[7..11].copy_from_slice(&1_749_100_000u32.to_le_bytes()); // unix seconds
+    payload[17] = 62; // bpm
+    payload[18] = 1; // rr slot count
+    payload[19..21].copy_from_slice(&837u16.to_le_bytes()); // rr slot 0
+    payload[36..40].copy_from_slice(&(-0.5f32).to_le_bytes()); // gravity x
+    payload[40..44].copy_from_slice(&0.25f32.to_le_bytes()); // gravity y
+    payload[44..48].copy_from_slice(&0.875f32.to_le_bytes()); // gravity z
+
+    let frame = build_gen4_payload_frame(&payload);
+    let parsed = parse_frame(DeviceType::Gen4, &frame).unwrap();
+
+    assert_eq!(parsed.header_len, 4);
+    assert!(parsed.header_crc_valid);
+    assert!(parsed.payload_crc_valid);
+    assert_eq!(parsed.packet_type_name.as_deref(), Some("HISTORICAL_DATA"));
+
+    match parsed.parsed_payload.unwrap() {
+        ParsedPayload::DataPacket {
+            packet_k,
+            timestamp_seconds,
+            hr_present_marker,
+            body_summary,
+            ..
+        } => {
+            assert_eq!(packet_k, Some(12));
+            assert_eq!(timestamp_seconds, Some(1_749_100_000));
+            assert_eq!(hr_present_marker, Some(62));
+            assert_eq!(
+                body_summary,
+                Some(DataPacketBodySummary::NormalHistory {
+                    hr_present: Some(true),
+                    marker_offset: Some(17),
+                    marker_value: Some(62),
+                    rr_intervals_ms: vec![837],
+                    rr_slot_count: Some(1),
+                    accel_milli_g: Some([-500, 250, 875]),
                 })
             );
         }
@@ -504,6 +564,9 @@ fn short_data_packets_preserve_raw_body_and_warn() {
                 hr_present: None,
                 marker_offset: Some(14),
                 marker_value: None,
+                rr_intervals_ms: Vec::new(),
+                rr_slot_count: None,
+                accel_milli_g: None,
             }),
             warnings: vec![
                 "data_packet_header_too_short".to_string(),

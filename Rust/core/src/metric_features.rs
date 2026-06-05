@@ -1050,10 +1050,16 @@ struct RespiratoryRatePlan {
 
 #[derive(Debug, Clone)]
 struct HrvPlan {
-    samples: I16SeriesSummary,
+    source: HrvPlanSource,
     flags: Option<u16>,
     sample_count: Option<u16>,
     summary_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+enum HrvPlanSource {
+    R17Samples(I16SeriesSummary),
+    NormalHistoryRr(Vec<u16>),
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -1764,8 +1770,10 @@ pub fn run_hrv_feature_report(
     end: &str,
     options: HrvFeatureOptions,
 ) -> GooseResult<HrvFeatureReport> {
-    let trusted_frames =
-        trusted_frames_for_summary_kinds(correlation, &["r17_optical_or_labrador_filtered"]);
+    let trusted_frames = trusted_frames_for_summary_kinds(
+        correlation,
+        &["r17_optical_or_labrador_filtered", "normal_history"],
+    );
     let mut issues = Vec::new();
     if options.require_trusted_evidence && !correlation.pass {
         issues.push("capture_correlation_report_not_passed".to_string());
@@ -4155,26 +4163,38 @@ fn hrv_plan_from_row(row: &DecodedFrameRow) -> GooseResult<Option<HrvPlan>> {
             ))
         })?;
     let Some(ParsedPayload::DataPacket {
-        body_summary:
-            Some(DataPacketBodySummary::R17OpticalOrLabradorFiltered {
-                flags,
-                sample_count,
-                samples: Some(samples),
-                warnings,
-                ..
-            }),
+        body_summary: Some(body_summary),
         ..
     }) = parsed_payload
     else {
         return Ok(None);
     };
 
-    Ok(Some(HrvPlan {
-        samples,
-        flags,
-        sample_count,
-        summary_warnings: warnings,
-    }))
+    Ok(match body_summary {
+        DataPacketBodySummary::R17OpticalOrLabradorFiltered {
+            flags,
+            sample_count,
+            samples: Some(samples),
+            warnings,
+            ..
+        } => Some(HrvPlan {
+            source: HrvPlanSource::R17Samples(samples),
+            flags,
+            sample_count,
+            summary_warnings: warnings,
+        }),
+        DataPacketBodySummary::NormalHistory {
+            rr_intervals_ms,
+            rr_slot_count,
+            ..
+        } if !rr_intervals_ms.is_empty() => Some(HrvPlan {
+            source: HrvPlanSource::NormalHistoryRr(rr_intervals_ms),
+            flags: None,
+            sample_count: rr_slot_count.map(u16::from),
+            summary_warnings: Vec::new(),
+        }),
+        _ => None,
+    })
 }
 
 fn motion_feature_from_plan(
@@ -4266,77 +4286,140 @@ fn hrv_feature_from_plan(
     plan: HrvPlan,
     trusted_frames: &BTreeMap<String, bool>,
 ) -> GooseResult<Option<HrvFeature>> {
-    let mut quality_flags = BTreeSet::new();
-    quality_flags.insert("preliminary_r17_i16_rr_interval_candidate".to_string());
-    quality_flags.insert("rr_interval_scale_unvalidated".to_string());
-    for warning in parse_warnings(row)? {
-        quality_flags.insert(warning);
-    }
-    for warning in &plan.summary_warnings {
-        quality_flags.insert(warning.clone());
-    }
+    match plan.source {
+        HrvPlanSource::R17Samples(samples) => {
+            let mut quality_flags = BTreeSet::new();
+            quality_flags.insert("preliminary_r17_i16_rr_interval_candidate".to_string());
+            quality_flags.insert("rr_interval_scale_unvalidated".to_string());
+            for warning in parse_warnings(row)? {
+                quality_flags.insert(warning);
+            }
+            for warning in &plan.summary_warnings {
+                quality_flags.insert(warning.clone());
+            }
 
-    let mut rr_intervals_ms = Vec::new();
-    let mut rejected_sample_count = 0usize;
-    for index in 0..plan.samples.parsed_count {
-        let offset = plan.samples.offset + index * 2;
-        let Some(value) = read_i16_le(payload, offset) else {
-            quality_flags.insert("r17_sample_read_failed".to_string());
-            rejected_sample_count += 1;
-            continue;
-        };
-        if (300..=2000).contains(&value) {
-            rr_intervals_ms.push(f64::from(value));
-        } else {
-            rejected_sample_count += 1;
+            let mut rr_intervals_ms = Vec::new();
+            let mut rejected_sample_count = 0usize;
+            for index in 0..samples.parsed_count {
+                let offset = samples.offset + index * 2;
+                let Some(value) = read_i16_le(payload, offset) else {
+                    quality_flags.insert("r17_sample_read_failed".to_string());
+                    rejected_sample_count += 1;
+                    continue;
+                };
+                if (300..=2000).contains(&value) {
+                    rr_intervals_ms.push(f64::from(value));
+                } else {
+                    rejected_sample_count += 1;
+                }
+            }
+
+            if rr_intervals_ms.is_empty() {
+                return Ok(None);
+            }
+            if rejected_sample_count > 0 {
+                quality_flags.insert("rr_interval_samples_outside_plausible_range".to_string());
+            }
+            if plan
+                .sample_count
+                .is_some_and(|sample_count| sample_count as usize != samples.parsed_count)
+            {
+                quality_flags.insert("r17_sample_count_mismatch".to_string());
+            }
+
+            let trusted_metric_input = trusted_frames
+                .get(&row.frame_id)
+                .copied()
+                .unwrap_or_default();
+
+            Ok(Some(HrvFeature {
+                metric_input_id: format!("{}.rr_intervals", row.frame_id),
+                frame_id: row.frame_id.clone(),
+                evidence_id: row.evidence_id.clone(),
+                captured_at: row.captured_at.clone(),
+                body_summary_kind: "r17_optical_or_labrador_filtered".to_string(),
+                source_signal: "r17_optical_or_labrador_filtered_i16_candidate".to_string(),
+                scale_basis: "preliminary_plausible_i16_as_rr_interval_ms".to_string(),
+                rr_intervals_ms,
+                raw_sample_count: samples.parsed_count,
+                plausible_sample_count: samples.parsed_count - rejected_sample_count,
+                rejected_sample_count,
+                trusted_metric_input,
+                quality_flags: quality_flags.into_iter().collect(),
+                provenance: json!({
+                    "input_source": "decoded_frame",
+                    "frame_id": row.frame_id,
+                    "evidence_id": row.evidence_id,
+                    "parser_version": row.parser_version,
+                    "body_summary_kind": "r17_optical_or_labrador_filtered",
+                    "sample_offset": samples.offset,
+                    "reported_sample_count": plan.sample_count,
+                    "flags": plan.flags,
+                    "promotion_policy": "requires_owned_capture_correlation",
+                    "scale_basis": "preliminary_plausible_i16_as_rr_interval_ms",
+                }),
+            }))
+        }
+        HrvPlanSource::NormalHistoryRr(rr_values) => {
+            let mut quality_flags = BTreeSet::new();
+            quality_flags.insert("normal_history_device_rr_interval".to_string());
+            for warning in parse_warnings(row)? {
+                quality_flags.insert(warning);
+            }
+            for warning in &plan.summary_warnings {
+                quality_flags.insert(warning.clone());
+            }
+
+            let raw_sample_count = rr_values.len();
+            let mut rr_intervals_ms = Vec::new();
+            let mut rejected_sample_count = 0usize;
+            for value in rr_values {
+                if (300..=2000).contains(&value) {
+                    rr_intervals_ms.push(f64::from(value));
+                } else {
+                    rejected_sample_count += 1;
+                }
+            }
+
+            if rr_intervals_ms.is_empty() {
+                return Ok(None);
+            }
+            if rejected_sample_count > 0 {
+                quality_flags.insert("rr_interval_samples_outside_plausible_range".to_string());
+            }
+
+            let trusted_metric_input = trusted_frames
+                .get(&row.frame_id)
+                .copied()
+                .unwrap_or_default();
+
+            Ok(Some(HrvFeature {
+                metric_input_id: format!("{}.rr_intervals", row.frame_id),
+                frame_id: row.frame_id.clone(),
+                evidence_id: row.evidence_id.clone(),
+                captured_at: row.captured_at.clone(),
+                body_summary_kind: "normal_history".to_string(),
+                source_signal: "normal_history_device_rr_interval".to_string(),
+                scale_basis: "device_reported_rr_interval_ms".to_string(),
+                rr_intervals_ms,
+                raw_sample_count,
+                plausible_sample_count: raw_sample_count - rejected_sample_count,
+                rejected_sample_count,
+                trusted_metric_input,
+                quality_flags: quality_flags.into_iter().collect(),
+                provenance: json!({
+                    "input_source": "decoded_frame",
+                    "frame_id": row.frame_id,
+                    "evidence_id": row.evidence_id,
+                    "parser_version": row.parser_version,
+                    "body_summary_kind": "normal_history",
+                    "reported_sample_count": plan.sample_count,
+                    "promotion_policy": "requires_owned_capture_correlation",
+                    "scale_basis": "device_reported_rr_interval_ms",
+                }),
+            }))
         }
     }
-
-    if rr_intervals_ms.is_empty() {
-        return Ok(None);
-    }
-    if rejected_sample_count > 0 {
-        quality_flags.insert("rr_interval_samples_outside_plausible_range".to_string());
-    }
-    if plan
-        .sample_count
-        .is_some_and(|sample_count| sample_count as usize != plan.samples.parsed_count)
-    {
-        quality_flags.insert("r17_sample_count_mismatch".to_string());
-    }
-
-    let trusted_metric_input = trusted_frames
-        .get(&row.frame_id)
-        .copied()
-        .unwrap_or_default();
-
-    Ok(Some(HrvFeature {
-        metric_input_id: format!("{}.rr_intervals", row.frame_id),
-        frame_id: row.frame_id.clone(),
-        evidence_id: row.evidence_id.clone(),
-        captured_at: row.captured_at.clone(),
-        body_summary_kind: "r17_optical_or_labrador_filtered".to_string(),
-        source_signal: "r17_optical_or_labrador_filtered_i16_candidate".to_string(),
-        scale_basis: "preliminary_plausible_i16_as_rr_interval_ms".to_string(),
-        rr_intervals_ms,
-        raw_sample_count: plan.samples.parsed_count,
-        plausible_sample_count: plan.samples.parsed_count - rejected_sample_count,
-        rejected_sample_count,
-        trusted_metric_input,
-        quality_flags: quality_flags.into_iter().collect(),
-        provenance: json!({
-            "input_source": "decoded_frame",
-            "frame_id": row.frame_id,
-            "evidence_id": row.evidence_id,
-            "parser_version": row.parser_version,
-            "body_summary_kind": "r17_optical_or_labrador_filtered",
-            "sample_offset": plan.samples.offset,
-            "reported_sample_count": plan.sample_count,
-            "flags": plan.flags,
-            "promotion_policy": "requires_owned_capture_correlation",
-            "scale_basis": "preliminary_plausible_i16_as_rr_interval_ms",
-        }),
-    }))
 }
 
 fn heart_rate_feature_from_plan(

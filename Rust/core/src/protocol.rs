@@ -132,6 +132,12 @@ pub enum DataPacketBodySummary {
         hr_present: Option<bool>,
         marker_offset: Option<usize>,
         marker_value: Option<u8>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        rr_intervals_ms: Vec<u16>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rr_slot_count: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        accel_milli_g: Option<[i32; 3]>,
     },
     R17OpticalOrLabradorFiltered {
         flags: Option<u16>,
@@ -360,6 +366,21 @@ pub fn build_v5_payload_frame(payload: &[u8]) -> Vec<u8> {
     frame
 }
 
+/// Harvard/Gen4 frame: [SOF=0xAA][Length u16 LE][CRC8 of length bytes][Payload][CRC32 of payload].
+/// The declared length covers payload + CRC32; unlike V5 frames there is no padding.
+pub fn build_gen4_payload_frame(payload: &[u8]) -> Vec<u8> {
+    let payload_crc = crc32fast::hash(payload).to_le_bytes();
+    let declared_len = (payload.len() + payload_crc.len()) as u16;
+    let length_bytes = declared_len.to_le_bytes();
+    let mut frame = Vec::with_capacity(4 + declared_len as usize);
+    frame.push(FRAME_START);
+    frame.extend_from_slice(&length_bytes);
+    frame.push(crc8(&length_bytes));
+    frame.extend_from_slice(payload);
+    frame.extend_from_slice(&payload_crc);
+    frame
+}
+
 pub fn packet_type_name(packet_type: u8) -> Option<&'static str> {
     Some(match packet_type {
         PACKET_TYPE_COMMAND => "COMMAND",
@@ -520,14 +541,21 @@ fn parse_data_packet_body_summary(
     };
 
     match packet_k {
-        7 | 9 | 12 | 18 | 24 => (
-            Some(DataPacketBodySummary::NormalHistory {
-                hr_present: hr_present_marker.map(|marker| marker != 0),
-                marker_offset: hr_marker_offset,
-                marker_value: hr_present_marker,
-            }),
-            Vec::new(),
-        ),
+        7 | 9 | 12 | 18 | 24 => {
+            let (rr_intervals_ms, rr_slot_count, accel_milli_g) =
+                parse_normal_history_rr_and_motion(payload, packet_k);
+            (
+                Some(DataPacketBodySummary::NormalHistory {
+                    hr_present: hr_present_marker.map(|marker| marker != 0),
+                    marker_offset: hr_marker_offset,
+                    marker_value: hr_present_marker,
+                    rr_intervals_ms,
+                    rr_slot_count,
+                    accel_milli_g,
+                }),
+                Vec::new(),
+            )
+        }
         17 => parse_r17_body_summary(payload),
         10 => parse_k10_raw_motion_summary(payload),
         21 => parse_k21_raw_motion_summary(payload),
@@ -766,6 +794,54 @@ fn history_hr_marker_offset(packet_k: u8) -> Option<usize> {
     }
 }
 
+/// Harvard-era (Gen4) normal-history bodies (K=9/12/24) carry RR intervals and,
+/// for K=12/24, an accelerometer gravity vector alongside the HR marker byte.
+/// Absolute payload offsets (after the [type, k, status] header): RR slot count
+/// at 18, four u16 LE RR slots at 19..27 (0 = empty slot), gravity vector as
+/// 3 x f32 LE at 36..48 (stored as milli-g so the summary stays `Eq`).
+fn parse_normal_history_rr_and_motion(
+    payload: &[u8],
+    packet_k: u8,
+) -> (Vec<u16>, Option<u8>, Option<[i32; 3]>) {
+    if !matches!(packet_k, 9 | 12 | 24) {
+        return (Vec::new(), None, None);
+    }
+
+    let rr_slot_count = payload.get(18).copied();
+    let mut rr_intervals_ms = Vec::new();
+    for slot in 0..4usize {
+        let Some(value) = read_u16_le(payload, 19 + slot * 2) else {
+            break;
+        };
+        if value != 0 {
+            rr_intervals_ms.push(value);
+        }
+    }
+
+    let accel_milli_g = if matches!(packet_k, 12 | 24) {
+        match (
+            read_f32_le(payload, 36),
+            read_f32_le(payload, 40),
+            read_f32_le(payload, 44),
+        ) {
+            (Some(x), Some(y), Some(z)) => Some([milli_units(x), milli_units(y), milli_units(z)]),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    (rr_intervals_ms, rr_slot_count, accel_milli_g)
+}
+
+fn milli_units(value: f32) -> i32 {
+    if value.is_finite() {
+        (f64::from(value) * 1000.0).round().clamp(-1_000_000_000.0, 1_000_000_000.0) as i32
+    } else {
+        0
+    }
+}
+
 fn read_u16_le(bytes: &[u8], offset: usize) -> Option<u16> {
     Some(u16::from_le_bytes([
         *bytes.get(offset)?,
@@ -786,6 +862,15 @@ fn read_i16_le(bytes: &[u8], offset: usize) -> Option<i16> {
     Some(i16::from_le_bytes([
         *bytes.get(offset)?,
         *bytes.get(offset + 1)?,
+    ]))
+}
+
+fn read_f32_le(bytes: &[u8], offset: usize) -> Option<f32> {
+    Some(f32::from_le_bytes([
+        *bytes.get(offset)?,
+        *bytes.get(offset + 1)?,
+        *bytes.get(offset + 2)?,
+        *bytes.get(offset + 3)?,
     ]))
 }
 
