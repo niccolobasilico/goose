@@ -21,9 +21,15 @@ struct HistoricalSleepNight {
   let deepMinutes: Double?
   let remMinutes: Double?
   let awakeMinutes: Double?
+  // Stage-less sessions (band window detection) report a single "asleep" total.
+  let asleepStageMinutes: Double?
 
   var asleepMinutes: Double {
-    (lightMinutes ?? 0) + (deepMinutes ?? 0) + (remMinutes ?? 0)
+    let staged = (lightMinutes ?? 0) + (deepMinutes ?? 0) + (remMinutes ?? 0)
+    if staged > 0 {
+      return staged
+    }
+    return asleepStageMinutes ?? 0
   }
 }
 
@@ -155,7 +161,8 @@ extension HealthDataStore {
         lightMinutes: doubleValue(minutes["light"]),
         deepMinutes: doubleValue(minutes["deep"]),
         remMinutes: doubleValue(minutes["rem"]),
-        awakeMinutes: doubleValue(minutes["awake"])
+        awakeMinutes: doubleValue(minutes["awake"]),
+        asleepStageMinutes: doubleValue(minutes["asleep"])
       )
       // La notte appartiene al giorno del risveglio; in caso di doppioni vince la piu' lunga.
       let dateKey = dateKeyFormatter.string(from: Date(timeIntervalSince1970: Double(endMS) / 1000))

@@ -163,13 +163,22 @@ struct HealthMetricFamilyView: View {
     case .sleep:
       let selectedDate = selectedDateBinding.wrappedValue
       let isToday = Calendar.current.isDate(selectedDate, inSameDayAs: Date())
-      if !isToday, let imported = store.importedSleepSummary(for: selectedDate) {
-        return [
-          HealthSummaryRow("Quality", value: imported.scoreText, source: .bridge("murmur history import"), systemImage: "bed.double"),
-          HealthSummaryRow("Time in bed", value: imported.inBedText, source: .bridge("murmur history import"), systemImage: "clock"),
-          HealthSummaryRow("Time asleep", value: imported.durationText, source: .bridge("murmur history import"), systemImage: "moon.zzz"),
-          HealthSummaryRow("Stages", value: imported.stagesText, source: .bridge("murmur history import"), systemImage: "chart.bar"),
+      // Stored sessions cover past dates and, when the packet-derived scorer
+      // has no native sleep, also today's night from the band window detection.
+      if let imported = store.importedSleepSummary(for: selectedDate),
+         !isToday || store.primarySleep() == nil {
+        var rows = [
+          HealthSummaryRow("Quality", value: imported.scoreText, source: .bridge("stored sleep session"), systemImage: "bed.double"),
+          HealthSummaryRow("Time in bed", value: imported.inBedText, source: .bridge("stored sleep session"), systemImage: "clock"),
+          HealthSummaryRow("Time asleep", value: imported.durationText, source: .bridge("stored sleep session"), systemImage: "moon.zzz"),
+          HealthSummaryRow("Stages", value: imported.stagesText, source: .bridge("stored sleep session"), systemImage: "chart.bar"),
         ]
+        if isToday {
+          rows.append(
+            HealthSummaryRow("Alarm", value: model.ble.alarmDisplaySummary, source: alarmRowSource, systemImage: "bell")
+          )
+        }
+        return rows
       }
       return [
         HealthSummaryRow("Quality", value: primarySleepQualitySummary, source: store.packetScoreSource("sleep score output"), systemImage: "bed.double"),
