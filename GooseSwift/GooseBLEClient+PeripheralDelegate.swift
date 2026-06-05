@@ -144,8 +144,13 @@ extension GooseBLEClient: CBPeripheralDelegate {
       return false
     }
 
-    for frame in Self.v5Frames(in: value) {
-      guard let payload = Self.v5Payload(in: frame),
+    // Gen4 frames use the 4-byte Harvard header: probing them with the V5
+    // parser never matches, which silently dropped every Gen4 command
+    // response, event, and metadata before the sync/alarm handlers ran.
+    let isGen4 = characteristic.uuid.uuidString.lowercased().hasPrefix("610800")
+    let frames = isGen4 ? Self.gen4Frames(in: value) : Self.v5Frames(in: value)
+    for frame in frames {
+      guard let payload = isGen4 ? Self.gen4Payload(in: frame) : Self.v5Payload(in: frame),
             let packetType = payload.first else {
         continue
       }
@@ -156,6 +161,13 @@ extension GooseBLEClient: CBPeripheralDelegate {
            V5PacketType.metadata,
            V5PacketType.puffinMetadata:
         return true
+      case V5PacketType.historicalData, V5PacketType.historicalIMUDataStream:
+        // The sync progress counter and idle rescheduling live on the main
+        // handler; the hop is only worth it while a sync is running.
+        if isHistoricalSyncing {
+          return true
+        }
+        continue
       default:
         continue
       }
