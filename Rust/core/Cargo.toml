@@ -24,6 +24,10 @@ name = "goose-whoop-import"
 path = "src/bin/goose-whoop-import.rs"
 
 [[bin]]
+name = "goose-gen4-frame-import"
+path = "src/bin/goose-gen4-frame-import.rs"
+
+[[bin]]
 name = "goose-capture-import"
 path = "src/bin/goose-capture-import.rs"
 
