@@ -132,6 +132,7 @@ use crate::{
         validate_sleep_v1_explanation_and_stability, validate_sleep_v1_release_gates,
         validate_sleep_v1_stage_labels_for_store,
     },
+    sleep_window_rollup::{SleepWindowRollupOptions, rollup_sleep_window_for_store},
     step_counter::{
         ActivityUnavailableDailyStatusOptions, StepCounterDailyRollupOptions,
         StepCounterHourlyRollupOptions, StepCounterIngestOptions,
@@ -920,6 +921,19 @@ struct RestingHeartRateFeaturesArgs {
     baseline_min_days: Option<usize>,
     #[serde(default)]
     require_baseline: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SleepWindowRollupArgs {
+    database_path: String,
+    date_key: String,
+    timezone: String,
+    #[serde(default = "default_correlation_start")]
+    start: String,
+    #[serde(default = "default_correlation_end")]
+    end: String,
+    #[serde(default)]
+    write_session: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2461,6 +2475,10 @@ fn handle_bridge_request_inner(request: BridgeRequest) -> BridgeResponse {
             .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
         "sleep.list_external_sessions" => request_args::<ExternalSleepSessionListArgs>(&request)
             .and_then(external_sleep_session_list_bridge)
+            .map(|value| bridge_ok(&request.request_id, value))
+            .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
+        "sleep.detect_band_window" => request_args::<SleepWindowRollupArgs>(&request)
+            .and_then(sleep_window_rollup_bridge)
             .map(|value| bridge_ok(&request.request_id, value))
             .unwrap_or_else(|error| bridge_error(&request.request_id, "method_error", error)),
         "sleep.add_correction_label" => request_args::<SleepCorrectionLabelArgs>(&request)
@@ -4371,6 +4389,23 @@ fn resting_heart_rate_daily_rollup_bridge(
         GooseError::message(format!(
             "cannot serialize resting heart-rate daily rollup report: {error}"
         ))
+    })
+}
+
+fn sleep_window_rollup_bridge(args: SleepWindowRollupArgs) -> GooseResult<serde_json::Value> {
+    let store = open_bridge_store(&args.database_path)?;
+    let report = rollup_sleep_window_for_store(
+        &store,
+        SleepWindowRollupOptions {
+            date_key: &args.date_key,
+            timezone: &args.timezone,
+            start: &args.start,
+            end: &args.end,
+            write_session: args.write_session,
+        },
+    )?;
+    serde_json::to_value(report).map_err(|error| {
+        GooseError::message(format!("cannot serialize sleep window rollup report: {error}"))
     })
 }
 

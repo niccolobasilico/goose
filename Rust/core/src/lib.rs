@@ -31,6 +31,7 @@ pub mod recovery_rollup;
 pub mod reference;
 pub mod report;
 pub mod sleep_validation;
+pub mod sleep_window_rollup;
 pub mod step_counter;
 pub mod step_discovery;
 pub mod step_motion_estimator;

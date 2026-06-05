@@ -110,8 +110,8 @@ const ALLOWED_ACTIVITY_METRIC_UNITS: [&str; 25] = [
     "percent", "ratio", "load", "joule", "w", "kg", "m/s2", "c", "f", "degrees", "n/a",
 ];
 
-const ALLOWED_EXTERNAL_SLEEP_PLATFORMS: [&str; 4] =
-    ["healthkit", "health_connect", "manual", "import"];
+const ALLOWED_EXTERNAL_SLEEP_PLATFORMS: [&str; 5] =
+    ["healthkit", "health_connect", "manual", "import", "local"];
 
 const ALLOWED_EXTERNAL_SLEEP_STAGE_KINDS: [&str; 8] = [
     "in_bed",
@@ -4181,6 +4181,17 @@ impl GooseStore {
             ],
         )?;
         Ok(true)
+    }
+
+    /// Removes an external sleep session (stages cascade via the FK).
+    /// Returns true when a row was deleted.
+    pub fn delete_external_sleep_session(&self, sleep_id: &str) -> GooseResult<bool> {
+        validate_required("sleep_id", sleep_id)?;
+        let deleted = self.conn.execute(
+            "DELETE FROM external_sleep_sessions WHERE sleep_id = ?1",
+            params![sleep_id],
+        )?;
+        Ok(deleted > 0)
     }
 
     pub fn external_sleep_session(

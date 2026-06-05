@@ -195,7 +195,46 @@ fn run() -> Result<(), String> {
             "resting_hr_daily_rollup {date_key}: resting_hr={} sample_count={} written={}",
             rollup["resting_hr_bpm"],
             rollup["sample_count"],
-            rollup["metric_written"],
+            rollup["daily_metric_written"],
+        );
+
+        let sleep = bridge(
+            "sleep.detect_band_window",
+            serde_json::json!({
+                "database_path": database_path,
+                "date_key": date_key,
+                "timezone": timezone,
+                "start": window_start,
+                "end": window_end,
+                "write_session": true,
+            }),
+        )?;
+        println!(
+            "sleep window {date_key}: detected={} start={} end={} duration_min={} hr min/avg/max={}/{}/{} hrv_rmssd={} rr={} written={} issues={}",
+            sleep["detected"],
+            sleep["start_time_unix_ms"],
+            sleep["end_time_unix_ms"],
+            sleep["duration_minutes"],
+            sleep["hr_min_bpm"],
+            sleep["hr_avg_bpm"],
+            sleep["hr_max_bpm"],
+            sleep["hrv_rmssd_ms"],
+            sleep["rr_interval_count"],
+            sleep["session_written"],
+            sleep["issues"],
+        );
+
+        let sessions = bridge(
+            "sleep.list_external_sessions",
+            serde_json::json!({
+                "database_path": database_path,
+                "start_time_unix_ms": 0i64,
+                "end_time_unix_ms": 4102444800000i64,
+            }),
+        )?;
+        println!(
+            "external sleep sessions: {}",
+            sessions["session_count"]
         );
 
         let recovery_rows = bridge(
