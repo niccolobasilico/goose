@@ -141,7 +141,7 @@ extension GooseAppModel {
       deviceModel: ble.activeDeviceName
     )
     let frameRows = Self.captureFrameRows(for: request)
-    _ = captureFrameWriteQueue.enqueue(rows: frameRows) { [weak self] result in
+    let enqueueResult = captureFrameWriteQueue.enqueue(rows: frameRows) { [weak self] result in
       guard !result.pass else {
         return
       }
@@ -150,6 +150,16 @@ extension GooseAppModel {
         source: "ble.sync",
         title: "historical_sync.frame_write.issues",
         body: "frames=\(result.frameCount) inserted=\(result.inserted) issues=\(result.issues.prefix(3).joined(separator: "; "))"
+      )
+    }
+    if enqueueResult.droppedFrameCount > 0 {
+      // Dropped historical frames are gone for good once the band gets the
+      // HistoryEnd ack, so make queue saturation loudly visible.
+      ble.record(
+        level: .warn,
+        source: "ble.sync",
+        title: "historical_sync.frame_write.dropped",
+        body: "dropped=\(enqueueResult.droppedFrameCount) queued=\(enqueueResult.queuedRowCount)/\(enqueueResult.maxQueuedRows)"
       )
     }
   }

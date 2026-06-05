@@ -285,7 +285,9 @@ final class GooseAppModel: ObservableObject {
   static let heartRateHourlyRangePublishInterval: TimeInterval = 1
   static let packetUIStatePublishInterval: TimeInterval = 0.2
   static let restingHeartRateFrameWriteInterval: TimeInterval = 0.1
-  static let captureFrameWriteQueueMaxRows = 2048
+  // Sized for historical sync bursts too: a full night is ~30-40k 1 Hz frames
+  // and dropped historical frames are unrecoverable after the HistoryEnd ack.
+  static let captureFrameWriteQueueMaxRows = 8192
   static let captureFrameWriteBatchMaxRows = 128
   static let passiveActivityCaptureDuration: TimeInterval = 12 * 60 * 60
   static let movementPacketStatusInterval: TimeInterval = 1
