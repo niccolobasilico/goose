@@ -8,9 +8,18 @@ extension HealthDataStore {
     databasePath: String
   ) -> Result<(reports: [String: [String: Any]], index: HistoricalDayIndex), Error> {
     let bridge = GooseRustBridge()
+    // Feature reports return one entry per decoded frame: an unbounded
+    // window over a full historical sync (tens of thousands of frames)
+    // freezes the app on every refresh. The live surfaces these reports
+    // feed only need the recent window; daily rollups below use their own
+    // calendar windows and are unaffected.
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+    isoFormatter.formatOptions = [.withInternetDateTime]
+    let featureWindowStart = isoFormatter.string(from: Date().addingTimeInterval(-48 * 3_600))
     let baseArgs: [String: Any] = [
       "database_path": databasePath,
-      "start": "0000",
+      "start": featureWindowStart,
       "end": "9999",
       "min_owned_captures": 2,
       "require_trusted_evidence": false,
@@ -21,7 +30,7 @@ extension HealthDataStore {
         method: "metrics.input_readiness",
         args: [
           "database_path": databasePath,
-          "start": "0000",
+          "start": featureWindowStart,
           "end": "9999",
           "min_owned_captures": 2,
           "require_owned_captures": false,
