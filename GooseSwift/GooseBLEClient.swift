@@ -425,21 +425,44 @@ final class GooseBLEClient: NSObject, ObservableObject {
     case getDataRange
     case sendHistoricalData
     case historicalDataResult
+    // Gen4 (Harvard) sync preamble, in send order. The band only streams
+    // historical packets after this handshake (reference: openwhoop
+    // sync_history_gen4): hello(35) -> setClock(10) -> getName(76) ->
+    // enterHighFreqSync(96) -> sendHistoricalData(22).
+    case helloHarvard
+    case setClock
+    case getName
+    case enterHighFreqSync
 
     var commandNumber: UInt8 {
       switch self {
       case .getDataRange: 34
       case .sendHistoricalData: 22
       case .historicalDataResult: 23
+      case .helloHarvard: 35
+      case .setClock: 10
+      case .getName: 76
+      case .enterHighFreqSync: 96
       }
     }
 
     var payload: [UInt8] {
       switch self {
-      case .getDataRange, .sendHistoricalData:
+      case .getDataRange, .sendHistoricalData, .helloHarvard, .setClock, .getName,
+        .enterHighFreqSync:
         []
       case .historicalDataResult:
         Self.defaultHistoricalDataResultPayload
+      }
+    }
+
+    /// Gen4 commands carry a [0x00] status byte when the payload is empty,
+    /// except EnterHighFreqSync which the band expects with a truly empty
+    /// payload (reference: openwhoop packet_implementations).
+    var gen4PadsEmptyPayloadWithStatusByte: Bool {
+      switch self {
+      case .enterHighFreqSync: false
+      default: true
       }
     }
 
@@ -450,6 +473,10 @@ final class GooseBLEClient: NSObject, ObservableObject {
       case .getDataRange: "GET_DATA_RANGE"
       case .sendHistoricalData: "SEND_HISTORICAL_DATA"
       case .historicalDataResult: "HISTORICAL_DATA_RESULT"
+      case .helloHarvard: "HELLO_HARVARD"
+      case .setClock: "SET_CLOCK"
+      case .getName: "GET_NAME"
+      case .enterHighFreqSync: "ENTER_HIGH_FREQ_SYNC"
       }
     }
   }

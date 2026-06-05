@@ -311,6 +311,29 @@ extension GooseBLEClient {
         self.retryHistoricalRangeOrFail(reason: timeoutStatus)
         return
       }
+      // Gen4 preamble commands advance on timeout instead of failing the whole
+      // sync: some firmware revisions may not answer every preamble command,
+      // while the band still enters sync mode (the transfer request itself,
+      // SEND_HISTORICAL_DATA, keeps the strict failure path).
+      let preambleNext: HistoricalCommandKind?
+      switch pending.kind {
+      case .helloHarvard: preambleNext = .setClock
+      case .setClock: preambleNext = .getName
+      case .getName: preambleNext = .enterHighFreqSync
+      case .enterHighFreqSync: preambleNext = .sendHistoricalData
+      default: preambleNext = nil
+      }
+      if let preambleNext {
+        self.pendingHistoricalCommand = nil
+        self.record(
+          level: .warn,
+          source: "ble.sync",
+          title: "historical_sync.preamble.timeout",
+          body: "\(kind.name) seq=\(sequence) got no response in \(Int(timeoutSeconds.rounded()))s; advancing to \(preambleNext.name)."
+        )
+        self.writeHistoricalCommand(preambleNext)
+        return
+      }
       self.failHistoricalSync("\(kind.name) timed out waiting for command response sequence \(sequence).")
     }
     historicalCommandTimeoutWorkItem = workItem

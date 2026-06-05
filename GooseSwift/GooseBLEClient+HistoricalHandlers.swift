@@ -490,6 +490,15 @@ extension GooseBLEClient {
       } else {
         scheduleHistoricalIdleCompletion(reason: "history_end_ack_idle")
       }
+    // Gen4 sync preamble chain (openwhoop sync_history_gen4 order).
+    case .helloHarvard:
+      writeHistoricalCommand(.setClock)
+    case .setClock:
+      writeHistoricalCommand(.getName)
+    case .getName:
+      writeHistoricalCommand(.enterHighFreqSync)
+    case .enterHighFreqSync:
+      writeHistoricalCommand(.sendHistoricalData)
     }
   }
 

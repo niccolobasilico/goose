@@ -6,6 +6,7 @@ extension GooseAppModel {
   func handleNotification(_ event: GooseNotificationEvent) {
     let (queueDepth, highWatermark) = incrementNotificationIngestQueueDepth()
     let captureImportActive = activeHealthPacketCapture != nil || activeActivityPersistence != nil
+    let historicalSyncActive = ble.isHistoricalSyncing
     let parseContext = notificationParseContext(for: event)
     publishPipelinePerformanceStatus(
       "ingest queued notification bytes=\(event.value.count) | ingestQ \(queueDepth) hwm \(highWatermark)"
@@ -21,7 +22,11 @@ extension GooseAppModel {
         return
       }
       guard captureImportActive else {
-        self.handleNotificationIngestResultWithoutCapture(result, parseContext: parseContext)
+        self.handleNotificationIngestResultWithoutCapture(
+          result,
+          parseContext: parseContext,
+          persistHistoricalFrames: historicalSyncActive
+        )
         return
       }
       DispatchQueue.main.async { [weak self] in
@@ -88,7 +93,8 @@ extension GooseAppModel {
 
   func handleNotificationIngestResultWithoutCapture(
     _ result: NotificationIngestResult,
-    parseContext: NotificationParseContext
+    parseContext: NotificationParseContext,
+    persistHistoricalFrames: Bool = false
   ) {
     let (queueDepth, highWatermark) = decrementNotificationIngestQueueDepth()
     publishPipelinePerformanceStatus(
@@ -116,7 +122,36 @@ extension GooseAppModel {
     guard !frames.isEmpty else {
       return
     }
+    if persistHistoricalFrames {
+      importHistoricalSyncFrames(frames, event: event)
+    }
     parseNotificationFrames(frames, event: event, context: parseContext)
+  }
+
+  /// Persists frames received during a band historical sync even without an
+  /// active capture session, so the night's history lands in decoded_frames
+  /// for the metric and sleep rollups. No capture session id: historical
+  /// bursts are not tied to a user-started capture (the FK requires one).
+  func importHistoricalSyncFrames(_ frames: [NotificationFrame], event: GooseNotificationEvent) {
+    let request = CaptureFrameRowBuildRequest(
+      frames: frames,
+      event: event,
+      capturedAt: Self.captureTimestampFormatter.string(from: event.capturedAt),
+      captureSessionID: nil,
+      deviceModel: ble.activeDeviceName
+    )
+    let frameRows = Self.captureFrameRows(for: request)
+    _ = captureFrameWriteQueue.enqueue(rows: frameRows) { [weak self] result in
+      guard !result.pass else {
+        return
+      }
+      self?.ble.record(
+        level: .warn,
+        source: "ble.sync",
+        title: "historical_sync.frame_write.issues",
+        body: "frames=\(result.frameCount) inserted=\(result.inserted) issues=\(result.issues.prefix(3).joined(separator: "; "))"
+      )
+    }
   }
 
   func handleEmptyNotificationIngestResult(_ result: NotificationIngestResult) {

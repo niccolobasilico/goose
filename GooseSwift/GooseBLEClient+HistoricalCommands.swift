@@ -58,7 +58,17 @@ extension GooseBLEClient {
       ? "Polling historical range"
       : (automatic ? "Requesting missed packets" : "Requesting historical packets")
     publishSyncToast(phase: .syncing, detail: toastDetail)
-    let firstCommand = firstCommandOverride ?? (requestHistoricalRangeBeforeTransfer ? .getDataRange : .sendHistoricalData)
+    let firstCommand: HistoricalCommandKind
+    if let firstCommandOverride {
+      firstCommand = firstCommandOverride
+    } else if supportsGen4HistoricalSync {
+      // Gen4 (Harvard) bands only stream history after the sync preamble:
+      // HELLO_HARVARD -> SET_CLOCK -> GET_NAME -> ENTER_HIGH_FREQ_SYNC ->
+      // SEND_HISTORICAL_DATA. The chain advances in handleHistoricalCommandResponse.
+      firstCommand = .helloHarvard
+    } else {
+      firstCommand = requestHistoricalRangeBeforeTransfer ? .getDataRange : .sendHistoricalData
+    }
     if firstCommand == .getDataRange {
       updateHistoricalRangeDebugStatus("started trigger=\(trigger) first=GET_DATA_RANGE")
     }
@@ -85,12 +95,23 @@ extension GooseBLEClient {
     }
 
     let isGen4 = isGen4CommandCharacteristic(commandCharacteristic)
-    var commandPayload = kind == .historicalDataResult
-      ? pendingHistoryEndAckPayload ?? kind.payload
-      : kind.payload
-    if isGen4, commandPayload.isEmpty {
-      // Gen4 (Harvard) GET_DATA_RANGE and SEND_HISTORICAL_DATA expect a single status byte
-      // (openwhoop history_start()/get_data_range() use [0x00]; the V5 variants use an empty payload).
+    var commandPayload: [UInt8]
+    if kind == .historicalDataResult {
+      commandPayload = pendingHistoryEndAckPayload ?? kind.payload
+    } else if isGen4, kind == .setClock {
+      // Gen4 SET_CLOCK payload: unix seconds u32 LE + 5 zero bytes
+      // (openwhoop set_time()).
+      var clockPayload: [UInt8] = []
+      Self.appendUInt32LE(UInt32(Date().timeIntervalSince1970), to: &clockPayload)
+      clockPayload.append(contentsOf: [0, 0, 0, 0, 0])
+      commandPayload = clockPayload
+    } else {
+      commandPayload = kind.payload
+    }
+    if isGen4, commandPayload.isEmpty, kind.gen4PadsEmptyPayloadWithStatusByte {
+      // Most Gen4 (Harvard) commands expect a single status byte when otherwise
+      // empty (openwhoop history_start()/get_data_range() use [0x00]); the V5
+      // variants and Gen4 ENTER_HIGH_FREQ_SYNC use a truly empty payload.
       commandPayload = [0x00]
     }
     let sequence = nextHistoricalSequence()

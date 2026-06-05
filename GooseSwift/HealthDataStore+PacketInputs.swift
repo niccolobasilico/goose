@@ -59,6 +59,10 @@ extension HealthDataStore {
         method: "metrics.resting_hr_daily_rollup",
         args: restingHeartRateDailyRollupArgs(databasePath: databasePath, writeMetric: true)
       )
+      reports["sleep_window_rollup"] = try bridge.request(
+        method: "sleep.detect_band_window",
+        args: sleepWindowRollupArgs(databasePath: databasePath, writeSession: true)
+      )
       reports["step_counter_rollup"] = try bridge.request(
         method: "metrics.step_counter_daily_rollup",
         args: stepCounterDailyRollupArgs(databasePath: databasePath, writeMetric: true)
@@ -163,6 +167,28 @@ extension HealthDataStore {
       "require_baseline": false,
       "min_sample_count": 2,
       "write_metric": writeMetric,
+    ]
+  }
+
+  nonisolated static func sleepWindowRollupArgs(
+    databasePath: String,
+    writeSession: Bool
+  ) -> [String: Any] {
+    let window = currentDailyMetricWindow()
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+    isoFormatter.formatOptions = [.withInternetDateTime]
+    // The night attributed to today usually starts the previous evening, so
+    // the detection window opens at yesterday noon (local) and closes at the
+    // end of today.
+    let start = window.start.addingTimeInterval(-12 * 3_600)
+    return [
+      "database_path": databasePath,
+      "date_key": window.dateKey,
+      "timezone": window.timezone,
+      "start": isoFormatter.string(from: start),
+      "end": window.endISO,
+      "write_session": writeSession,
     ]
   }
 

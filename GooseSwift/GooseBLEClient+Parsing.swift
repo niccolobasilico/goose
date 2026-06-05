@@ -831,7 +831,9 @@ extension GooseBLEClient {
   }
 
   static func historicalDataResultPayload(fromHistoryEndMetadataPayload payload: [UInt8]) -> [UInt8]? {
-    guard payload.count > 21 else {
+    // Gen4 HistoryEnd metadata is exactly 21 bytes ([type, seq, cmd] + 18 data
+    // bytes), so the end_data slice at 13..<21 needs count >= 21, not > 21.
+    guard payload.count >= 21 else {
       return nil
     }
 
