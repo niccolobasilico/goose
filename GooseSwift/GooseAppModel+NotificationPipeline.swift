@@ -28,7 +28,10 @@ extension GooseAppModel {
         // the capture path's own (throttled) import a harmless duplicate.
         self.importHistoricalSyncFrames(result.frames, event: event)
       }
-      guard captureImportActive else {
+      // During a historical sync the burst rate saturates the main thread if
+      // every notification takes the capture path (import + parse on main).
+      // Frames are already persisted above, so stay on the background path.
+      guard captureImportActive, !historicalSyncActive else {
         self.handleNotificationIngestResultWithoutCapture(result, parseContext: parseContext)
         return
       }
