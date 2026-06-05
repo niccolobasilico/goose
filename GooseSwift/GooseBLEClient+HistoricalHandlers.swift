@@ -549,6 +549,20 @@ extension GooseBLEClient {
       historyEndAckQueued = false
       historyEndAckSentThisBurst = false
       pendingHistoryEndAckPayload = nil
+      if supportsGen4HistoricalSync, pendingHistoricalCommand?.kind == .sendHistoricalData {
+        // Gen4 answers SEND_HISTORICAL_DATA with PENDING and never sends a
+        // final SUCCESS: the history burst itself is the answer. Clear the
+        // pending command here so the HistoryEnd ack can go out immediately
+        // and the PENDING grace timeout cannot kill a live transfer.
+        historicalCommandTimeoutWorkItem?.cancel()
+        pendingHistoricalCommand = nil
+        record(
+          level: .debug,
+          source: "ble.sync",
+          title: "historical_sync.transfer.accepted",
+          body: "history_start cleared pending SEND_HISTORICAL_DATA"
+        )
+      }
     case .historyEnd:
       historyEndReceived = true
       guard !historyEndAckSentThisBurst else {
