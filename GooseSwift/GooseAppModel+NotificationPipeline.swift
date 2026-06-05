@@ -21,12 +21,15 @@ extension GooseAppModel {
         self.handleEmptyNotificationIngestResult(result)
         return
       }
+      if historicalSyncActive {
+        // Historical bursts must bypass the capture write throttle entirely:
+        // once the HistoryEnd ack goes out the band deletes those packets, so
+        // every frame has to land in the DB. Deterministic evidence ids make
+        // the capture path's own (throttled) import a harmless duplicate.
+        self.importHistoricalSyncFrames(result.frames, event: event)
+      }
       guard captureImportActive else {
-        self.handleNotificationIngestResultWithoutCapture(
-          result,
-          parseContext: parseContext,
-          persistHistoricalFrames: historicalSyncActive
-        )
+        self.handleNotificationIngestResultWithoutCapture(result, parseContext: parseContext)
         return
       }
       DispatchQueue.main.async { [weak self] in
@@ -93,8 +96,7 @@ extension GooseAppModel {
 
   func handleNotificationIngestResultWithoutCapture(
     _ result: NotificationIngestResult,
-    parseContext: NotificationParseContext,
-    persistHistoricalFrames: Bool = false
+    parseContext: NotificationParseContext
   ) {
     let (queueDepth, highWatermark) = decrementNotificationIngestQueueDepth()
     publishPipelinePerformanceStatus(
@@ -121,9 +123,6 @@ extension GooseAppModel {
     let frames = result.frames
     guard !frames.isEmpty else {
       return
-    }
-    if persistHistoricalFrames {
-      importHistoricalSyncFrames(frames, event: event)
     }
     parseNotificationFrames(frames, event: event, context: parseContext)
   }

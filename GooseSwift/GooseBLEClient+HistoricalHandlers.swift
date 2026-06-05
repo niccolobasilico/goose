@@ -34,12 +34,17 @@ extension GooseBLEClient {
         terminal: false,
         failed: false
       )
-      record(
-        level: .debug,
-        source: "ble.sync",
-        title: "historical_sync.packet",
-        body: "\(characteristic.uuid.uuidString) count=\(historicalPacketsReceivedThisSync)"
-      )
+      // A full-night sync delivers tens of thousands of packets; per-packet
+      // records flood the message store and freeze the events feed.
+      if historicalPacketsReceivedThisSync == 1
+        || historicalPacketsReceivedThisSync.isMultiple(of: 100) {
+        record(
+          level: .debug,
+          source: "ble.sync",
+          title: "historical_sync.packet",
+          body: "\(characteristic.uuid.uuidString) count=\(historicalPacketsReceivedThisSync)"
+        )
+      }
     case V5PacketType.metadata, V5PacketType.puffinMetadata:
       handleHistoricalMetadata(payload)
     default:
