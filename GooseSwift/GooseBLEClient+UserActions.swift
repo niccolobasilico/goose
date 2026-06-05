@@ -181,6 +181,21 @@ extension GooseBLEClient {
       record(level: .debug, source: "ble", title: "hello.skipped", body: "already sent reason=\(reason)")
       return
     }
+    if let commandCharacteristic, isGen4CommandCharacteristic(commandCharacteristic) {
+      // The recorded client hello is a V5 frame (8-byte header). On a Gen4
+      // strap its bytes desync the band's frame parser (the Gen4 framing reads
+      // a bogus 2-byte length and waits for data that never comes), after
+      // which every subsequent command is swallowed without a response. Gen4
+      // needs no hello: skip it and leave the parser clean for real commands.
+      clientHelloSentForCurrentConnection = true
+      record(
+        level: .debug,
+        source: "ble",
+        title: "hello.skipped",
+        body: "gen4 command characteristic; V5 client hello would desync the strap parser reason=\(reason)"
+      )
+      return
+    }
     guard
       let activePeripheral,
       let commandCharacteristic,

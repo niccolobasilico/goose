@@ -7938,7 +7938,10 @@ where
 
 fn parse_device_type(value: &str) -> GooseResult<DeviceType> {
     match value {
-        "GEN_4" | "Gen4" | "gen4" => Ok(DeviceType::Gen4),
+        // "GEN4" is the serde SCREAMING_SNAKE_CASE spelling the Swift layer
+        // sends (rustDeviceType); accept it here too so notification parsing
+        // does not reject Gen4 frames.
+        "GEN_4" | "GEN4" | "Gen4" | "gen4" => Ok(DeviceType::Gen4),
         "MAVERICK" | "Maverick" | "maverick" => Ok(DeviceType::Maverick),
         "PUFFIN" | "Puffin" | "puffin" => Ok(DeviceType::Puffin),
         "GOOSE" | "Goose" | "goose" => Ok(DeviceType::Goose),

@@ -178,6 +178,13 @@ extension GooseBLEClient {
   }
 
   func writeType(for characteristic: CBCharacteristic) -> CBCharacteristicWriteType? {
+    // Gen4 (Harvard) straps process commands written without response (the
+    // verified reference transport always uses WithoutResponse); with-response
+    // writes get accepted by the stack but never produce a command response.
+    if isGen4CommandCharacteristic(characteristic),
+       characteristic.properties.contains(.writeWithoutResponse) {
+      return .withoutResponse
+    }
     if characteristic.properties.contains(.write) {
       return .withResponse
     }
